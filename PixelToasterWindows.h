@@ -7,7 +7,6 @@
 
 #include <Windows.h>
 #include <windowsx.h>
-
 #include <d3d9.h>
 
 #ifdef _MSC_VER
@@ -19,64 +18,48 @@
 #endif
 
 namespace PixelToaster {
+    // Forward declarations to reduce dependencies
+    class DisplayInterface;
+    class Listener;
+    class Converter;
+    struct Mouse;
+    struct Key;
+    struct TrueColorPixel;
+    struct FloatingPointPixel;
+    struct Rectangle;
+    enum class Format;
+    enum class Mode;
+    enum class Output;
+    class DisplayAdapter;
+    class TimerInterface;
 /// smart pointer for COM interfaces
-
-inline int Abs(int v)
-{
-    return v < 0 ? -v : v;
-}
-
 template <typename I>
 class SmartI
 {
 public:
-    SmartI(I* i = nullptr)
-        : i_(i)
-    {
-    }
-    SmartI(SmartI& other)
-        : i_(other.i_)
-    {
-        if (i_)
-            i_->AddRef();
-    }
-    ~SmartI()
-    {
-        if (i_)
-            i_->Release();
-        i_ = nullptr;
-    }
-    SmartI& operator=(SmartI& other)
-    {
-        SmartI temp(other);
-        swap(temp);
-        return *this;
-    }
-    void reset(I* i = nullptr)
-    {
-        SmartI temp(i);
-        swap(temp);
-    }
+    SmartI(I* i = nullptr) : i_(i) {}
+    SmartI(const SmartI& other) : i_(other.i_) { if (i_) i_->AddRef(); }
+    ~SmartI() { if (i_) i_->Release(); i_ = nullptr; }
+    SmartI& operator=(const SmartI& other) { SmartI temp(other); swap(temp); return *this; }
+    void reset(I* i = nullptr) { SmartI temp(i); swap(temp); }
     I* const get() const { return i_; }
     I* const operator->() const { return get(); }
     I**      address() { return &i_; }
-    void     swap(SmartI& other)
-    {
-        I* i     = i_;
-        i_       = other.i_;
-        other.i_ = i;
-    }
+    void     swap(SmartI& other) { I* i = i_; i_ = other.i_; other.i_ = i; }
     explicit operator bool() const { return i_ != nullptr; }
 
 private:
     I* i_;
 };
 
-// Windows Adapter interface
+/// Helper functions
+inline int Abs(int v) { return v < 0 ? -v : v; }
 
+// Windows Adapter interface
 class WindowsAdapter
 {
 public:
+    virtual ~WindowsAdapter() = default;
     virtual bool paint()      = 0; // paint pixels to display
     virtual bool fullscreen() = 0; // switch to fullscreen output
     virtual bool windowed()   = 0; // switch to windowed output
@@ -85,17 +68,14 @@ public:
 };
 
 // Window implementation
-
 class WindowsWindow
 {
 public:
     WindowsWindow(DisplayInterface* display, WindowsAdapter* adapter, const char title[], int width, int height)
+        : display(display), adapter(adapter), width(width), height(height)
     {
         assert(display);
         assert(adapter);
-
-        // save display
-        this->display = display; // note: required for listener callbacks
 
 #ifdef UNICODE
         // convert title to unicode
@@ -103,14 +83,7 @@ public:
         MultiByteToWideChar(CP_ACP, 0, title, -1, unicodeTitle, sizeof(unicodeTitle));
 #endif
 
-        // setup data
-
-        this->adapter = adapter;
-        this->width   = width;
-        this->height  = height;
-
         // defaults
-
         window     = nullptr;
         systemMenu = nullptr;
         active     = false;
@@ -120,32 +93,28 @@ public:
         mode       = Windowed;
 
         // get handle to system arrow cursor
-
         arrowCursor = LoadCursor(nullptr, IDC_ARROW);
 
         // create null cursor so we can hide it reliably
-
         integer32 cursorAnd = 0xFFFFFFFF;
         integer32 cursorXor = 0;
-
         nullCursor = CreateCursor(nullptr, 0, 0, 1, 1, &cursorAnd, &cursorXor);
 
         // clear mouse data
-
-        mouse.x              = 0;
-        mouse.y              = 0;
-        mouse.buttons.left   = false;
+        mouse.x = 0;
+        mouse.y = 0;
+        mouse.buttons.left = false;
         mouse.buttons.middle = false;
-        mouse.buttons.right  = false;
+        mouse.buttons.right = false;
 
         // setup keyboard data
-
-        for (int i=0;i<256;i++)
+        for (int i = 0; i < 256; i++)
         {
             translate[i] = (Key::Code)i;
             down[i] = false;
         }
         
+        // Map special keys
         translate[219] = Key::OpenBracket;
         translate[221] = Key::CloseBracket;
         translate[220] = Key::BackSlash;
@@ -160,10 +129,9 @@ public:
         translate[46]  = Key::Delete;
 
         // setup window class
-
         HINSTANCE instance = GetModuleHandle(nullptr);
 
-        WNDCLASSEX windowClass;
+        WNDCLASSEX windowClass = {};
         windowClass.cbSize        = sizeof(WNDCLASSEX);
         windowClass.style         = 0;
         windowClass.lpfnWndProc   = &StaticWindowProc;
@@ -177,25 +145,22 @@ public:
         windowClass.hIconSm       = nullptr;
 #ifdef UNICODE
         windowClass.lpszClassName = unicodeTitle;
-#else
-        windowClass.lpszClassName = title;
-#endif
-
-#ifdef UNICODE
         UnregisterClass(unicodeTitle, instance);
 #else
+        windowClass.lpszClassName = title;
         UnregisterClass(title, instance);
 #endif
 
         if (!RegisterClassEx(&windowClass))
             return;
 
-            // create window
-
+        // create window
 #ifdef UNICODE
-        window = CreateWindow(unicodeTitle, unicodeTitle, WS_OVERLAPPEDWINDOW, 0, 0, width, height, nullptr, nullptr, instance, nullptr);
+        window = CreateWindow(unicodeTitle, unicodeTitle, WS_OVERLAPPEDWINDOW, 
+                              0, 0, width, height, nullptr, nullptr, instance, nullptr);
 #else
-        window = CreateWindow(title, title, WS_OVERLAPPEDWINDOW, 0, 0, width, height, nullptr, nullptr, instance, nullptr);
+        window = CreateWindow(title, title, WS_OVERLAPPEDWINDOW, 
+                              0, 0, width, height, nullptr, nullptr, instance, nullptr);
 #endif
 
         if (!window)
@@ -203,80 +168,52 @@ public:
 
 #ifdef _MSC_VER
 #    pragma warning(push)
-#    pragma warning(disable : 4244) // conversion from 'LONG_PTR' to 'LONG', possible loss of data (stupid win32 api! =p)
+#    pragma warning(disable : 4244) // conversion from 'LONG_PTR' to 'LONG'
 #endif
-
         SetWindowLongPtr(window, GWLP_USERDATA, (LONG_PTR)this);
-
 #ifdef _MSC_VER
 #    pragma warning(pop)
 #endif
 
         // setup system menu
-
         updateSystemMenu();
     }
 
     ~WindowsWindow()
     {
-        DestroyWindow(window);
-        window = nullptr;
-
+        if (window)
+        {
+            DestroyWindow(window);
+            window = nullptr;
+        }
         DestroyCursor(nullCursor);
     }
 
     // show the window (it is initially hidden)
-
-    void show()
-    {
-        ShowWindow(window, SW_SHOW);
-    }
+    void show() { ShowWindow(window, SW_SHOW); }
 
     // hide the window
+    void hide() { ShowWindow(window, SW_HIDE); }
 
-    void hide()
-    {
-        ShowWindow(window, SW_HIDE);
-    }
-
-    // check if window is visible?
-
-    bool visible() const
-    {
-        return IsWindowVisible(window) != 0;
-    }
+    // check if window is visible
+    bool visible() const { return IsWindowVisible(window) != 0; }
 
     // put window in fullscreen mode
-
     void fullscreen(int width, int height)
     {
-        // 1. hide window
-        // 2. hide mouse cursor
-        // 3. popup window style
-        // 4. move window to cover display entirely
-        // 5. show window
-        // 6. update system menu
-
-        this->width  = width;
+        this->width = width;
         this->height = height;
 
         hide();
-
         SetCursor(nullCursor);
-
         SetWindowLongPtr(window, GWL_STYLE, WS_POPUPWINDOW);
 
-        int w = GetSystemMetrics(SM_CXSCREEN);
-        int h = GetSystemMetrics(SM_CYSCREEN);
+        int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+        int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+        int windowWidth = (width > screenWidth) ? screenWidth : width;
+        int windowHeight = (height > screenHeight) ? screenHeight : height;
 
-        if (width > w)
-            w = width;
-
-        if (height > h)
-            h = height;
-
-        SetWindowPos(window, nullptr, 0, 0, w, h, SWP_NOZORDER);
-
+        SetWindowPos(window, nullptr, 0, 0, windowWidth, windowHeight, SWP_NOZORDER);
         show();
 
         mode = Fullscreen;
@@ -284,30 +221,21 @@ public:
     }
 
     // put window in windowed mode
-
     void windowed(int width, int height)
     {
-        // 1. hide window
-        // 2. overlapped window style
-        // 3. adjust window rect
-        // 4. center window
-        // 5. show mouse cursor
-        // 6. update system menu
-
-        this->width  = width;
+        this->width = width;
         this->height = height;
 
         hide();
-
         SetWindowLongPtr(window, GWL_STYLE, WS_OVERLAPPEDWINDOW);
 
         RECT rect;
         GetWindowRect(window, &rect);
         AdjustWindowRect(&rect, WS_OVERLAPPEDWINDOW, 0);
-        SetWindowPos(window, nullptr, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, SWP_NOZORDER);
+        SetWindowPos(window, nullptr, rect.left, rect.top, 
+                    rect.right - rect.left, rect.bottom - rect.top, SWP_NOZORDER);
 
         center();
-
         SetCursor(arrowCursor);
 
         mode = Windowed;
@@ -316,60 +244,51 @@ public:
 
     // center the window on the desktop
     // note: has no effect if the window is minimized or maximized
-
     void center()
     {
         RECT rect;
         GetWindowRect(window, &rect);
 
-        const int width  = rect.right - rect.left;
-        const int height = rect.bottom - rect.top;
+        const int windowWidth = rect.right - rect.left;
+        const int windowHeight = rect.bottom - rect.top;
 
-        int x = (GetSystemMetrics(SM_CXSCREEN) - width) >> 1;
-        int y = (GetSystemMetrics(SM_CYSCREEN) - height) >> 1;
+        int x = (GetSystemMetrics(SM_CXSCREEN) - windowWidth) / 2;
+        int y = (GetSystemMetrics(SM_CYSCREEN) - windowHeight) / 2;
 
-        if (x < 0)
-            x = 0;
+        x = (x < 0) ? 0 : x;
+        y = (y < 0) ? 0 : y;
 
-        if (y < 0)
-            y = 0;
-
-        SetWindowPos(window, nullptr, x, y, width, height, SWP_NOZORDER);
+        SetWindowPos(window, nullptr, x, y, windowWidth, windowHeight, SWP_NOZORDER);
 
         centered = true;
-
         updateSystemMenu();
     }
 
     // zoom window
-
     void zoom(float scale)
     {
         // get current window rect and calculate current window center
-
         RECT rect;
         GetWindowRect(window, &rect);
 
-        const int cx = (rect.left + rect.right) / 2;
-        const int cy = (rect.top + rect.bottom) / 2;
+        const int centerX = (rect.left + rect.right) / 2;
+        const int centerY = (rect.top + rect.bottom) / 2;
 
         // calculate window rect with origin (0,0)
-
         rect.left   = 0;
         rect.top    = 0;
-        rect.right  = rect.left + (int)(width * scale);
-        rect.bottom = rect.top + (int)(height * scale);
+        rect.right  = static_cast<int>(width * scale);
+        rect.bottom = static_cast<int>(height * scale);
 
-        // adjust window rect then make adjust origin back to (0,0)
-
+        // adjust window rect for non-client area
         AdjustWindowRect(&rect, WS_OVERLAPPEDWINDOW, 0);
 
+        // Ensure origin is not negative
         if (rect.left < 0)
         {
             rect.right -= rect.left;
             rect.left = 0;
         }
-
         if (rect.top < 0)
         {
             rect.bottom -= rect.top;
@@ -377,23 +296,20 @@ public:
         }
 
         // center zoomed window around previous window center
+        const int deltaX = centerX - (rect.right - rect.left) / 2;
+        const int deltaY = centerY - (rect.bottom - rect.top) / 2;
 
-        const int dx = cx - (rect.right - rect.left) / 2;
-        const int dy = cy - (rect.bottom - rect.top) / 2;
+        rect.left += deltaX;
+        rect.right += deltaX;
+        rect.top += deltaY;
+        rect.bottom += deltaY;
 
-        rect.left += dx;
-        rect.right += dx;
-        rect.top += dy;
-        rect.bottom += dy;
-
-        // check that the newly centered window position is origin (0,0) or larger. no negative origin values allowed
-
+        // Ensure window is not off-screen
         if (rect.left < 0)
         {
             rect.right -= rect.left;
             rect.left = 0;
         }
-
         if (rect.top < 0)
         {
             rect.bottom -= rect.top;
@@ -401,11 +317,10 @@ public:
         }
 
         // finally set the zoomed window position
-
-        SetWindowPos(window, nullptr, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, SWP_NOZORDER);
+        SetWindowPos(window, nullptr, rect.left, rect.top, 
+                    rect.right - rect.left, rect.bottom - rect.top, SWP_NOZORDER);
 
         // detect what zoom level we are at and update system menu
-
         if (scale == 1.0f)
             zoomLevel = ZOOM_ORIGINAL;
         else if (scale == 2.0f)
@@ -419,23 +334,18 @@ public:
     }
 
     // window update pumps the message queue
-
     void update()
     {
         // hide mouse cursor if fullscreen
-
         if (mode == Fullscreen && active)
             SetCursor(nullCursor);
 
         // check window
-
         if (!window)
             return;
 
         // message pump
-
         MSG message;
-
         bool done = false;
 
         while (!done)
@@ -449,21 +359,15 @@ public:
             {
                 done = true;
             }
-
             Sleep(0);
         }
     }
 
-    // get the window handle.
-    // null if the window failed to initialize.
-
-    HWND handle() const
-    {
-        return window;
-    }
+    // get the window handle
+    // null if the window failed to initialize
+    HWND handle() const { return window; }
 
     // title management
-
     void title(const char title[])
     {
         if (!window)
@@ -479,27 +383,17 @@ public:
     }
 
     // listener management
-
-    void listener(Listener* listener)
-    {
-        _listener = listener;
-    }
-
-    Listener* listener()
-    {
-        return _listener;
-    }
+    void listener(Listener* listener) { _listener = listener; }
+    Listener* listener() { return _listener; }
 
 protected:
     static LRESULT CALLBACK StaticWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
     {
         LONG_PTR extra = GetWindowLongPtr(hWnd, GWLP_USERDATA);
-
         if (!extra)
             return DefWindowProc(hWnd, uMsg, wParam, lParam);
 
-        auto* window = (WindowsWindow*)extra;
-
+        auto* window = reinterpret_cast<WindowsWindow*>(extra);
         return window->WindowProc(hWnd, uMsg, wParam, lParam);
     }
 
@@ -508,9 +402,12 @@ protected:
         switch (uMsg)
         {
             case WM_ACTIVATE:
-                active = wParam != WA_INACTIVE;
+                active = (wParam != WA_INACTIVE);
                 if (_listener)
-                    _listener->onActivate(display->wrapper() ? *display->wrapper() : *display, active);
+                {
+                    auto& displayRef = display->wrapper() ? *display->wrapper() : *display;
+                    _listener->onActivate(displayRef, active);
+                }
                 break;
 
             case WM_PAINT:
@@ -527,7 +424,8 @@ protected:
             case WM_CLOSE:
                 if (_listener)
                 {
-                    if (_listener->onClose(display->wrapper() ? *display->wrapper() : *display))
+                    auto& displayRef = display->wrapper() ? *display->wrapper() : *display;
+                    if (_listener->onClose(displayRef))
                         adapter->exit();
                 }
                 else
@@ -537,206 +435,159 @@ protected:
             case WM_SETCURSOR:
                 if (LOWORD(lParam) == HTCLIENT)
                 {
-                    if (mode == Fullscreen)
-                        SetCursor(nullCursor);
-                    else
-                        SetCursor(arrowCursor);
+                    SetCursor((mode == Fullscreen) ? nullCursor : arrowCursor);
                 }
                 else
+                {
                     return DefWindowProc(hWnd, uMsg, wParam, lParam);
+                }
                 break;
 
             case WM_SYSCOMMAND:
-            {
                 switch (wParam)
                 {
                     case MENU_CENTER:
                         center();
                         updateSystemMenu();
                         break;
-
                     case MENU_ZOOM_ORIGINAL:
                         zoom(1.0f);
                         updateSystemMenu();
                         break;
-
                     case MENU_ZOOM_2X:
                         zoom(2.0f);
                         updateSystemMenu();
                         break;
-
                     case MENU_ZOOM_4X:
                         zoom(4.0f);
                         updateSystemMenu();
                         break;
-
                     case MENU_ZOOM_8X:
                         zoom(8.0f);
                         updateSystemMenu();
                         break;
-
                     case MENU_WINDOWED:
                         adapter->windowed();
                         break;
-
                     case MENU_FULLSCREEN:
                         adapter->fullscreen();
                         break;
-
                     default:
                         return DefWindowProc(hWnd, uMsg, wParam, lParam);
                 }
-            }
-            break;
+                break;
 
             case WM_MOVING:
-            {
                 if (centered)
                 {
                     centered = false;
                     updateSystemMenu();
                 }
-            }
-            break;
+                break;
 
             case WM_KEYDOWN:
             case WM_SYSKEYDOWN:
             {
-                auto key = (unsigned char)wParam;
+                auto key = static_cast<unsigned char>(wParam);
 
                 if (key == VK_RETURN && GetAsyncKeyState(VK_MENU))
                 {
-                    adapter->toggle(); // note: toggle fullscreen and windowed output
+                    adapter->toggle(); // toggle fullscreen and windowed output
                     break;
                 }
 
                 if (!down[key])
                 {
                     bool defaultKeyHandlers = true;
-
                     if (_listener)
                     {
-                        _listener->onKeyDown(display->wrapper() ? *display->wrapper() : *display, (Key::Code)translate[key]);
+                        auto& displayRef = display->wrapper() ? *display->wrapper() : *display;
+                        _listener->onKeyDown(displayRef, static_cast<Key::Code>(translate[key]));
                         defaultKeyHandlers = _listener->defaultKeyHandlers();
                     }
 
-                    if (defaultKeyHandlers)
+                    if (defaultKeyHandlers && key == 27)
                     {
-                        if (key == 27)
-                            adapter->exit(); // quit on escape by default, return false in listener to disable this
+                        adapter->exit(); // quit on escape by default
                     }
 
                     down[key] = true;
                 }
 
                 if (_listener)
-                    _listener->onKeyPressed(display->wrapper() ? *display->wrapper() : *display, (Key::Code)translate[key]);
+                {
+                    auto& displayRef = display->wrapper() ? *display->wrapper() : *display;
+                    _listener->onKeyPressed(displayRef, static_cast<Key::Code>(translate[key]));
+                }
             }
             break;
 
             case WM_KEYUP:
             case WM_SYSKEYUP:
             {
-                auto key = (unsigned char)wParam;
-
+                auto key = static_cast<unsigned char>(wParam);
                 if (_listener)
-                    _listener->onKeyUp(display->wrapper() ? *display->wrapper() : *display, (Key::Code)translate[key]);
-
+                {
+                    auto& displayRef = display->wrapper() ? *display->wrapper() : *display;
+                    _listener->onKeyUp(displayRef, static_cast<Key::Code>(translate[key]));
+                }
                 down[key] = false;
             }
             break;
 
             case WM_LBUTTONDOWN:
-            {
-                if (!(mouse.buttons.left | mouse.buttons.right | mouse.buttons.middle))
-                    SetCapture(hWnd);
-                RECT rect;
-                GetClientRect(window, &rect);
-                const float widthRatio  = (float)width / (rect.right - rect.left);
-                const float heightRatio = (float)height / (rect.bottom - rect.top);
-                mouse.x                 = (float)GET_X_LPARAM(lParam) * widthRatio;
-                mouse.y                 = (float)GET_Y_LPARAM(lParam) * heightRatio;
-                mouse.buttons.left      = true;
-                if (_listener)
-                    _listener->onMouseButtonDown(display->wrapper() ? *display->wrapper() : *display, mouse);
-            }
-            break;
-
             case WM_MBUTTONDOWN:
-            {
-                if (!(mouse.buttons.left | mouse.buttons.right | mouse.buttons.middle))
-                    SetCapture(hWnd);
-                RECT rect;
-                GetClientRect(window, &rect);
-                const float widthRatio  = (float)width / (rect.right - rect.left);
-                const float heightRatio = (float)height / (rect.bottom - rect.top);
-                mouse.x                 = (float)GET_X_LPARAM(lParam) * widthRatio;
-                mouse.y                 = (float)GET_Y_LPARAM(lParam) * heightRatio;
-                mouse.buttons.middle    = true;
-                if (_listener)
-                    _listener->onMouseButtonDown(display->wrapper() ? *display->wrapper() : *display, mouse);
-            }
-            break;
-
             case WM_RBUTTONDOWN:
             {
                 if (!(mouse.buttons.left | mouse.buttons.right | mouse.buttons.middle))
                     SetCapture(hWnd);
+                
                 RECT rect;
                 GetClientRect(window, &rect);
-                const float widthRatio  = (float)width / (rect.right - rect.left);
-                const float heightRatio = (float)height / (rect.bottom - rect.top);
-                mouse.x                 = (float)GET_X_LPARAM(lParam) * widthRatio;
-                mouse.y                 = (float)GET_Y_LPARAM(lParam) * heightRatio;
-                mouse.buttons.right     = true;
+                const float widthRatio = static_cast<float>(width) / (rect.right - rect.left);
+                const float heightRatio = static_cast<float>(height) / (rect.bottom - rect.top);
+                mouse.x = static_cast<float>(GET_X_LPARAM(lParam)) * widthRatio;
+                mouse.y = static_cast<float>(GET_Y_LPARAM(lParam)) * heightRatio;
+                
+                if (uMsg == WM_LBUTTONDOWN)
+                    mouse.buttons.left = true;
+                else if (uMsg == WM_MBUTTONDOWN)
+                    mouse.buttons.middle = true;
+                else if (uMsg == WM_RBUTTONDOWN)
+                    mouse.buttons.right = true;
+                
                 if (_listener)
-                    _listener->onMouseButtonDown(display->wrapper() ? *display->wrapper() : *display, mouse);
+                {
+                    auto& displayRef = display->wrapper() ? *display->wrapper() : *display;
+                    _listener->onMouseButtonDown(displayRef, mouse);
+                }
             }
             break;
 
             case WM_LBUTTONUP:
-            {
-                RECT rect;
-                GetClientRect(window, &rect);
-                const float widthRatio  = (float)width / (rect.right - rect.left);
-                const float heightRatio = (float)height / (rect.bottom - rect.top);
-                mouse.x                 = (float)GET_X_LPARAM(lParam) * widthRatio;
-                mouse.y                 = (float)GET_Y_LPARAM(lParam) * heightRatio;
-                mouse.buttons.left      = false;
-                if (_listener)
-                    _listener->onMouseButtonUp(display->wrapper() ? *display->wrapper() : *display, mouse);
-                if (!(mouse.buttons.left | mouse.buttons.right | mouse.buttons.middle))
-                    ReleaseCapture();
-            }
-            break;
-
             case WM_MBUTTONUP:
-            {
-                RECT rect;
-                GetClientRect(window, &rect);
-                const float widthRatio  = (float)width / (rect.right - rect.left);
-                const float heightRatio = (float)height / (rect.bottom - rect.top);
-                mouse.x                 = (float)GET_X_LPARAM(lParam) * widthRatio;
-                mouse.y                 = (float)GET_Y_LPARAM(lParam) * heightRatio;
-                mouse.buttons.middle    = false;
-                if (_listener)
-                    _listener->onMouseButtonUp(display->wrapper() ? *display->wrapper() : *display, mouse);
-                if (!(mouse.buttons.left | mouse.buttons.right | mouse.buttons.middle))
-                    ReleaseCapture();
-            }
-            break;
-
             case WM_RBUTTONUP:
             {
                 RECT rect;
                 GetClientRect(window, &rect);
-                const float widthRatio  = (float)width / (rect.right - rect.left);
-                const float heightRatio = (float)height / (rect.bottom - rect.top);
-                mouse.x                 = (float)GET_X_LPARAM(lParam) * widthRatio;
-                mouse.y                 = (float)GET_Y_LPARAM(lParam) * heightRatio;
-                mouse.buttons.right     = false;
+                const float widthRatio = static_cast<float>(width) / (rect.right - rect.left);
+                const float heightRatio = static_cast<float>(height) / (rect.bottom - rect.top);
+                mouse.x = static_cast<float>(GET_X_LPARAM(lParam)) * widthRatio;
+                mouse.y = static_cast<float>(GET_Y_LPARAM(lParam)) * heightRatio;
+                
+                if (uMsg == WM_LBUTTONUP)
+                    mouse.buttons.left = false;
+                else if (uMsg == WM_MBUTTONUP)
+                    mouse.buttons.middle = false;
+                else if (uMsg == WM_RBUTTONUP)
+                    mouse.buttons.right = false;
+                
                 if (_listener)
-                    _listener->onMouseButtonUp(display->wrapper() ? *display->wrapper() : *display, mouse);
+                {
+                    auto& displayRef = display->wrapper() ? *display->wrapper() : *display;
+                    _listener->onMouseButtonUp(displayRef, mouse);
+                }
+                
                 if (!(mouse.buttons.left | mouse.buttons.right | mouse.buttons.middle))
                     ReleaseCapture();
             }
@@ -746,23 +597,27 @@ protected:
             {
                 RECT rect;
                 GetClientRect(window, &rect);
-                const float widthRatio  = (float)width / (rect.right - rect.left);
-                const float heightRatio = (float)height / (rect.bottom - rect.top);
-                mouse.x                 = (float)GET_X_LPARAM(lParam) * widthRatio;
-                mouse.y                 = (float)GET_Y_LPARAM(lParam) * heightRatio;
+                const float widthRatio = static_cast<float>(width) / (rect.right - rect.left);
+                const float heightRatio = static_cast<float>(height) / (rect.bottom - rect.top);
+                mouse.x = static_cast<float>(GET_X_LPARAM(lParam)) * widthRatio;
+                mouse.y = static_cast<float>(GET_Y_LPARAM(lParam)) * heightRatio;
+                
                 if (_listener)
-                    _listener->onMouseMove(display->wrapper() ? *display->wrapper() : *display, mouse);
+                {
+                    auto& displayRef = display->wrapper() ? *display->wrapper() : *display;
+                    _listener->onMouseMove(displayRef, mouse);
+                }
             }
             break;
 
-            default: break;
+            default:
+                break;
         }
 
         return DefWindowProc(hWnd, uMsg, wParam, lParam);
     }
 
     // system menu item ids
-
     enum SystemMenuItems
     {
         MENU_SEPARATOR_A = 1,
@@ -778,7 +633,6 @@ protected:
     };
 
     // current zoom level for window
-
     enum ZoomLevel
     {
         ZOOM_RESIZED,
@@ -789,13 +643,11 @@ protected:
     };
 
     // update addition system menu items
-
     void updateSystemMenu()
     {
         systemMenu = GetSystemMenu(window, FALSE);
 
         // remove additional items
-
         RemoveMenu(systemMenu, MENU_SEPARATOR_A, MF_BYCOMMAND);
         RemoveMenu(systemMenu, MENU_ZOOM_ORIGINAL, MF_BYCOMMAND);
         RemoveMenu(systemMenu, MENU_ZOOM_2X, MF_BYCOMMAND);
@@ -808,35 +660,30 @@ protected:
         RemoveMenu(systemMenu, MENU_CENTER, MF_BYCOMMAND);
 
         // rebuild menu
+        const bool isWindowed = (mode == Windowed);
 
-        bool windowed = mode == Windowed;
-
-        if (windowed && !IsIconic(window) && !IsMaximized(window))
+        if (isWindowed && !IsIconic(window) && !IsMaximized(window))
         {
             AppendMenu(systemMenu, MF_SEPARATOR, MENU_SEPARATOR_A, TEXT(""));
             AppendMenu(systemMenu, MF_STRING, MENU_ZOOM_ORIGINAL, TEXT("Original Size"));
 
-            const int desktopWidth  = GetSystemMetrics(SM_CXSCREEN);
+            const int desktopWidth = GetSystemMetrics(SM_CXSCREEN);
             const int desktopHeight = GetSystemMetrics(SM_CYSCREEN);
 
             if (width * 2 < desktopWidth && height * 2 < desktopHeight)
                 AppendMenu(systemMenu, MF_STRING, MENU_ZOOM_2X, TEXT("2x Zoom"));
-
             if (width * 4 < desktopWidth && height * 4 < desktopHeight)
                 AppendMenu(systemMenu, MF_STRING, MENU_ZOOM_4X, TEXT("4x Zoom"));
-
             if (width * 8 < desktopWidth && height * 8 < desktopHeight)
                 AppendMenu(systemMenu, MF_STRING, MENU_ZOOM_8X, TEXT("8x Zoom"));
         }
 
         AppendMenu(systemMenu, MF_SEPARATOR, MENU_SEPARATOR_B, TEXT(""));
+        AppendMenu(systemMenu, MF_STRING, 
+                   isWindowed ? MENU_FULLSCREEN : MENU_WINDOWED, 
+                   isWindowed ? TEXT("Fullscreen") : TEXT("Windowed"));
 
-        if (!windowed)
-            AppendMenu(systemMenu, MF_STRING, MENU_WINDOWED, TEXT("Windowed"));
-        else
-            AppendMenu(systemMenu, MF_STRING, MENU_FULLSCREEN, TEXT("Fullscreen"));
-
-        if (!centered && windowed)
+        if (!centered && isWindowed)
         {
             AppendMenu(systemMenu, MF_SEPARATOR, MENU_SEPARATOR_C, TEXT(""));
             AppendMenu(systemMenu, MF_STRING, MENU_CENTER, TEXT("Center"));
@@ -844,11 +691,11 @@ protected:
     }
 
 private:
-    HWND  window;     // window handle
-    HMENU systemMenu; // system menu handle
-    int   width;      // natural window width
-    int   height;     // natural window height
-    bool  active;     // true if window is currently active
+    HWND              window;     // window handle
+    HMENU             systemMenu; // system menu handle
+    int               width;      // natural window width
+    int               height;     // natural window height
+    bool              active;     // true if window is currently active
 
     enum Mode
     {
@@ -856,24 +703,17 @@ private:
         Windowed
     };
 
-    Mode mode; // current window mode (fullscreen or windowed)
-
-    Mouse mouse; // current mouse input data
-
-    Key  translate[256]; // key translation table (win32 scancode -> Key::Code)
-    bool down[256];      // key down table (true means key is down)
-
-    HCURSOR arrowCursor; // handle to system arrow cursor (does not need to be freed)
-    HCURSOR nullCursor;  // null cursor when we dont want to see it
-
-    bool      centered;  // true if window is centered
-    ZoomLevel zoomLevel; // current zoom level
-
-    WindowsAdapter* adapter; // the adapter interface (must not be null)
-
-    DisplayInterface* display; // required for listener callbacks (may be null)
-
-    Listener* _listener; // the listener interface (may be null)
+    Mode              mode;       // current window mode (fullscreen or windowed)
+    Mouse             mouse;      // current mouse input data
+    Key               translate[256]; // key translation table (win32 scancode -> Key::Code)
+    bool              down[256];  // key down table (true means key is down)
+    HCURSOR           arrowCursor;// handle to system arrow cursor (does not need to be freed)
+    HCURSOR           nullCursor; // null cursor when we don't want to see it
+    bool              centered;   // true if window is centered
+    ZoomLevel         zoomLevel;  // current zoom level
+    WindowsAdapter*   adapter;    // the adapter interface (must not be null)
+    DisplayInterface* display;    // required for listener callbacks (may be null)
+    Listener*         _listener;  // the listener interface (may be null)
 };
 
 // ********************* Windows Device (DirectX 9.0) ***************************
@@ -1404,7 +1244,6 @@ public:
     {
         delete device;
         delete window;
-
         DisplayAdapter::close();
     }
 
@@ -1419,7 +1258,6 @@ public:
         if (pendingToggle)
         {
             pendingToggle = false;
-
             if (output() == Output::Windowed)
                 fullscreen();
             else
@@ -1444,7 +1282,6 @@ public:
     void title(const char title[]) override
     {
         DisplayAdapter::title(title);
-
         if (window)
             window->title(title);
     }
@@ -1452,7 +1289,6 @@ public:
     void listener(Listener* listener) override
     {
         DisplayAdapter::listener(listener);
-
         if (window)
             window->listener(listener);
     }
@@ -1464,7 +1300,6 @@ public:
         if (!device || !device->valid())
         {
             HDC dc = GetDC(window->handle());
-
             if (dc)
             {
                 HBRUSH brush = CreateSolidBrush(RGB(0, 0, 0));
@@ -1475,9 +1310,7 @@ public:
                 DeleteObject(brush);
                 ReleaseDC(window->handle(), dc);
             }
-
             ValidateRect(window->handle(), nullptr);
-
             return true;
         }
         else
@@ -1492,11 +1325,9 @@ public:
         {
             if (output() == Output::Fullscreen)
                 return true;
-
             delete device;
             device = nullptr;
         }
-
         window->fullscreen(width(), height());
 
         device = new WindowsDevice(direct3d, window->handle(), width(), height(), mode(), false);
@@ -1520,11 +1351,9 @@ public:
         {
             if (output() == Output::Windowed)
                 return true;
-
             delete device;
             device = nullptr;
         }
-
         window->windowed(width(), height());
 
         device = new WindowsDevice(direct3d, window->handle(), width(), height(), mode(), true);
@@ -1575,49 +1404,88 @@ class WindowsTimer : public PixelToaster::TimerInterface
 public:
     WindowsTimer()
     {
-        QueryPerformanceFrequency((LARGE_INTEGER*)&_frequency);
+        QueryPerformanceFrequency(reinterpret_cast<LARGE_INTEGER*>(&_frequency));
         reset();
     }
 
-    void reset()
+    void reset() override
     {
-        QueryPerformanceCounter((LARGE_INTEGER*)&_timeCounter);
+        QueryPerformanceCounter(reinterpret_cast<LARGE_INTEGER*>(&_timeCounter));
         _deltaCounter = _timeCounter;
-        _time         = 0.0;
+        _time = 0.0;
+        _pausedTime = 0.0;
+        _isPaused = false;
     }
 
-    double time()
+    double time() override
     {
+        if (_isPaused)
+        {
+            return _time - _pausedTime;
+        }
+        
         __int64 counter;
-        QueryPerformanceCounter((LARGE_INTEGER*)&counter);
-        _time += (counter - _timeCounter) / (double)_frequency;
+        QueryPerformanceCounter(reinterpret_cast<LARGE_INTEGER*>(&counter));
+        _time += static_cast<double>(counter - _timeCounter) / _frequency;
         _timeCounter = counter;
-        return _time;
+        return _time - _pausedTime;
     }
 
-    double delta()
+    double delta() override
     {
+        if (_isPaused)
+        {
+            return 0.0;
+        }
+        
         __int64 counter;
-        QueryPerformanceCounter((LARGE_INTEGER*)&counter);
-        double delta  = (counter - _deltaCounter) / (double)_frequency;
+        QueryPerformanceCounter(reinterpret_cast<LARGE_INTEGER*>(&counter));
+        double deltaTime = static_cast<double>(counter - _deltaCounter) / _frequency;
         _deltaCounter = counter;
-        return delta;
+        return deltaTime;
     }
 
-    double resolution()
+    double resolution() override
     {
-        return 1.0 / (double)_frequency;
+        return 1.0 / _frequency;
     }
 
-    void wait(double seconds)
+    void wait(double seconds) override
     {
-        Sleep(int(seconds * 1000));
+        Sleep(static_cast<DWORD>(seconds * 1000.0));
+    }
+    
+    //新增暂停/继续功能
+    void pause() override
+    {
+        if (!_isPaused)
+        {
+            _pausedTime = time();
+            _isPaused = true;
+        }
+    }
+    
+    void resume() override
+    {
+        if (_isPaused)
+        {
+            QueryPerformanceCounter(reinterpret_cast<LARGE_INTEGER*>(&_timeCounter));
+            _deltaCounter = _timeCounter;
+            _isPaused = false;
+        }
+    }
+    
+    bool isPaused() const override
+    {
+        return _isPaused;
     }
 
 private:
     double  _time;         ///< current time in seconds
+    double  _pausedTime;   ///< time when paused in seconds
     __int64 _timeCounter;  ///< raw 64bit timer counter for time
     __int64 _deltaCounter; ///< raw 64bit timer counter for delta
     __int64 _frequency;    ///< raw 64bit timer frequency
+    bool    _isPaused;     ///< true if timer is paused
 };
 } // namespace PixelToaster

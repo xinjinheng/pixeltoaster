@@ -1095,6 +1095,9 @@ public:
     virtual double delta()              = 0;
     virtual double resolution()         = 0;
     virtual void   wait(double seconds) = 0;
+    virtual void   pause()              = 0;    //新增暂停功能
+    virtual void   resume()             = 0;    //新增继续功能
+    virtual bool   isPaused() const     = 0;    //新增检查暂停状态
 };
 
 /** \brief A high resolution timer.
