@@ -1394,6 +1394,12 @@ public:
         if (!result)
             return false;
 
+        // Initialize GPU context if needed
+        if (renderMode != RenderMode::CPU)
+        {
+            gpuContext = createGPUContext();
+        }
+
         if (DisplayAdapter::listener())
             DisplayAdapter::listener()->onOpen(wrapper() ? *wrapper() : *(DisplayInterface*)this);
 
@@ -1402,6 +1408,13 @@ public:
 
     void close() override
     {
+        // Destroy GPU context if it exists
+        if (gpuContext)
+        {
+            destroyGPUContext(gpuContext);
+            gpuContext = nullptr;
+        }
+
         delete device;
         delete window;
 
@@ -1550,6 +1563,41 @@ public:
         shutdown = true;
     }
 
+    // GPU-related methods
+    GPU::Context* gpuContext() const override
+    {
+        return gpuContext;
+    }
+
+    bool setGPURenderMode(RenderMode mode) override
+    {
+        if (renderMode == mode)
+            return true;
+
+        // Destroy old GPU context if needed
+        if (gpuContext && renderMode != RenderMode::CPU)
+        {
+            destroyGPUContext(gpuContext);
+            gpuContext = nullptr;
+        }
+
+        // Update render mode
+        renderMode = mode;
+
+        // Create new GPU context if needed
+        if (renderMode != RenderMode::CPU && open())
+        {
+            gpuContext = createGPUContext();
+        }
+
+        return true;
+    }
+
+    RenderMode gpuRenderMode() const override
+    {
+        return renderMode;
+    }
+
 protected:
     void defaults() override
     {
@@ -1558,14 +1606,18 @@ protected:
         device        = nullptr;
         shutdown      = false;
         pendingToggle = false;
+        gpuContext    = nullptr;
+        renderMode    = RenderMode::CPU;
     }
 
 private:
-    LPDIRECT3D9    direct3d;
-    WindowsWindow* window;
-    WindowsDevice* device;
-    bool           shutdown;
-    bool           pendingToggle;
+    LPDIRECT3D9       direct3d;
+    WindowsWindow*    window;
+    WindowsDevice*    device;
+    bool              shutdown;
+    bool              pendingToggle;
+    GPU::Context*     gpuContext;
+    RenderMode        renderMode;
 };
 
 // ********************* Windows High Resolution Timer Implementation ***************************
