@@ -11,6 +11,7 @@
 #include "PixelToaster.h"
 #include "PixelToasterCommon.h"
 #include "PixelToasterConversion.h"
+#include "PixelToasterGPU.h"
 
 #if PIXELTOASTER_PLATFORM == PIXELTOASTER_UNIX
 #    include "PixelToasterUnix.h"

@@ -52,10 +52,17 @@ add_library(PixelToaster
     PixelToaster.h
     PixelToasterCommon.h
     PixelToasterConversion.h
+    PixelToasterConversion.cpp
 
     PixelToasterApple.h
     PixelToasterUnix.h
     PixelToasterWindows.h
+    PixelToasterWindows.cpp
+    
+    PixelToasterGPU.h
+    PixelToasterGPU.cpp
+    PixelToasterVulkan.h
+    PixelToasterVulkan.cpp
 )
 
 if (PIXELTOASTER_TINY)
@@ -88,11 +95,26 @@ if (APPLE)
         "-framework Cocoa"
         "-framework OpenGL"
     )
+    # Vulkan for macOS
+    find_package(Vulkan REQUIRED)
+    target_include_directories(PixelToaster PRIVATE ${Vulkan_INCLUDE_DIRS})
+    target_link_libraries(PixelToaster PRIVATE ${Vulkan_LIBRARIES})
 elseif (UNIX)
     target_link_libraries(PixelToaster PRIVATE
         X11
         rt
     )
+    # Vulkan for Linux
+    find_package(Vulkan REQUIRED)
+    target_include_directories(PixelToaster PRIVATE ${Vulkan_INCLUDE_DIRS})
+    target_link_libraries(PixelToaster PRIVATE ${Vulkan_LIBRARIES})
+endif()
+
+if (WIN32)
+    # Vulkan for Windows
+    find_package(Vulkan REQUIRED)
+    target_include_directories(PixelToaster PRIVATE ${Vulkan_INCLUDE_DIRS})
+    target_link_libraries(PixelToaster PRIVATE ${Vulkan_LIBRARIES})
 endif()
 
 if (ENABLE_EXAMPLES)
@@ -111,6 +133,7 @@ if (ENABLE_EXAMPLES)
     add_exapmle(ExampleMultiDisplay     ExampleMultiDisplay.cpp)
     add_exapmle(ExampleTimer            ExampleTimer.cpp)
     add_exapmle(ExampleTrueColor        ExampleTrueColor.cpp)
+    add_exapmle(GPUExample              GPUExample.cpp)
 endif()
 
 #set(CPACK_PROJECT_NAME ${PROJECT_NAME})

@@ -131,6 +131,22 @@ public:
         return _wrapper;
     }
 
+    // GPU-related methods
+    GPU::Context* gpuContext() const override
+    {
+        return nullptr;
+    }
+
+    bool setGPURenderMode(RenderMode mode) override
+    {
+        return false;
+    }
+
+    RenderMode gpuRenderMode() const override
+    {
+        return RenderMode::CPU;
+    }
+
 protected:
     // note: override this "unified" update to implement your display update.
     // only one of the pointers will be non-null, this allows you to avoid

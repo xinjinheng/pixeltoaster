@@ -127,6 +127,14 @@
 #    include <vector>
 #endif
 
+// Forward declarations for GPU classes
+namespace GPU {
+    class Context;
+    class Shader;
+    class ComputeShader;
+    class Framebuffer;
+}
+
 namespace PixelToaster {
 #ifndef PIXELTOASTER_NO_STL
 using std::vector;
@@ -330,6 +338,25 @@ if ( display.open() )
 		\see Display::open and Display::mode
      **/
 
+class RenderMode
+{
+public:
+    /// Render mode enumeration.
+    enum Enumeration
+    {
+        CPU,    ///< Use CPU for rendering (default)
+        GPU,    ///< Use GPU for rendering
+        Hybrid  ///< Use both CPU and GPU for rendering
+    };
+
+    RenderMode() : enumeration(CPU) {}
+    RenderMode(Enumeration enumVal) : enumeration(enumVal) {}
+    operator Enumeration() const { return enumeration; }
+
+private:
+    Enumeration enumeration;
+};
+
 class Mode
 {
 public:
@@ -394,6 +421,10 @@ public:
         XRGB1555, ///< 15 bit hicolor.
         XBGR1555, ///< 15 bit hicolor in BGR order.
         XBGRFFFF, ///< 128bit floating point color. this is the native pixel format in Mode::FloatingPoint.
+        RGBA16F,   ///< 64bit floating point color (16 bits per channel)
+        RGBA32F,   ///< 128bit floating point color (32 bits per channel)
+        BGRA16F,   ///< 64bit floating point color in BGR order
+        BGRA32F,   ///< 128bit floating point color in BGR order
     };
 
     /// The default constructor sets the enumeration value to Unknown.
@@ -774,7 +805,7 @@ class DisplayInterface
 public:
     virtual ~DisplayInterface() = default;
 
-    virtual bool open(const char title[], int width, int height, Output output = Output::Default, Mode mode = Mode::FloatingPoint) = 0;
+    virtual bool open(const char title[], int width, int height, Output output = Output::Default, Mode mode = Mode::FloatingPoint, RenderMode renderMode = RenderMode::CPU) = 0;
     virtual void close()                                                                                                           = 0;
 
     virtual bool open() const = 0;
@@ -794,6 +825,11 @@ public:
 
     virtual void              wrapper(DisplayInterface* wrapper) = 0;
     virtual DisplayInterface* wrapper()                          = 0;
+
+    // GPU-related methods
+    virtual GPU::Context*     gpuContext() const                 = 0;
+    virtual bool              setGPURenderMode(RenderMode mode)  = 0;
+    virtual RenderMode        gpuRenderMode() const              = 0;
 };
 
 /** \brief Provides the mechanism for getting your pixels up on the screen.
@@ -889,12 +925,17 @@ public:
     /// @param mode the mode of operation for the display. you can choose between true color mode and floating point color mode.
     /// @returns true if the display open was successful.
 
-    bool open(const char title[], int width, int height, Output output = Output::Default, Mode mode = Mode::FloatingPoint) override
+    bool open(const char title[], int width, int height, Output output = Output::Default, Mode mode = Mode::FloatingPoint, RenderMode renderMode = RenderMode::CPU)
     {
         if (internal)
-            return internal->open(title, width, height, output, mode);
+            return internal->open(title, width, height, output, mode, renderMode);
         else
             return false;
+    }
+
+    bool open(const char title[], int width, int height, Output output = Output::Default, Mode mode = Mode::FloatingPoint) override
+    {
+        return open(title, width, height, output, mode, RenderMode::CPU);
     }
 
     /// Close display.
@@ -1068,6 +1109,31 @@ public:
             return internal->listener();
         else
             return nullptr;
+    }
+
+    // GPU-related methods
+    GPU::Context* gpuContext() const
+    {
+        if (internal)
+            return internal->gpuContext();
+        else
+            return nullptr;
+    }
+
+    bool setGPURenderMode(RenderMode mode)
+    {
+        if (internal)
+            return internal->setGPURenderMode(mode);
+        else
+            return false;
+    }
+
+    RenderMode gpuRenderMode() const
+    {
+        if (internal)
+            return internal->gpuRenderMode();
+        else
+            return RenderMode::CPU;
     }
 
     void wrapper(class DisplayInterface* wrapper) override
