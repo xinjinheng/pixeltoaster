@@ -42,18 +42,42 @@
 PIXELTOASTER_API PixelToaster::DisplayInterface* PixelToaster::createDisplay()
 {
 #ifdef DisplayClass
-    return new DisplayClass();
+    try
+    {
+        DisplayInterface* display = new DisplayClass();
+        if (!display)
+        {
+            throw ResourceException(1001, "Failed to create display: memory allocation failed");
+        }
+        return display;
+    }
+    catch (const std::bad_alloc& e)
+    {
+        throw ResourceException(1001, std::string("Failed to create display: ") + e.what());
+    }
 #else
-    return nullptr;
+    throw PlatformException(1002, "Failed to create display: unsupported platform");
 #endif
 }
 
 PIXELTOASTER_API PixelToaster::TimerInterface* PixelToaster::createTimer()
 {
 #ifdef TimerClass
-    return new TimerClass();
+    try
+    {
+        TimerInterface* timer = new TimerClass();
+        if (!timer)
+        {
+            throw ResourceException(1003, "Failed to create timer: memory allocation failed");
+        }
+        return timer;
+    }
+    catch (const std::bad_alloc& e)
+    {
+        throw ResourceException(1003, std::string("Failed to create timer: ") + e.what());
+    }
 #else
-    return nullptr;
+    throw PlatformException(1004, "Failed to create timer: unsupported platform");
 #endif
 }
 
@@ -79,6 +103,11 @@ PixelToaster::Converter_XRGB8888_to_XBGR1555 converter_XRGB8888_to_XBGR1555;
 
 PIXELTOASTER_API PixelToaster::Converter* PixelToaster::requestConverter(PixelToaster::Format source, PixelToaster::Format destination)
 {
+    if (source == Format::Unknown || destination == Format::Unknown)
+    {
+        throw InvalidParameterException(2001, "Invalid pixel format: Unknown format specified");
+    }
+
     if (source == Format::XBGRFFFF)
     {
         switch (destination)
@@ -94,7 +123,7 @@ PIXELTOASTER_API PixelToaster::Converter* PixelToaster::requestConverter(PixelTo
             case Format::XBGR1555: return &converter_XBGRFFFF_to_XBGR1555;
 
             default:
-                return nullptr;
+                throw InvalidParameterException(2002, "Unsupported format conversion: XBGRFFFF to unknown format");
         }
     }
     else if (source == Format::XRGB8888)
@@ -112,9 +141,9 @@ PIXELTOASTER_API PixelToaster::Converter* PixelToaster::requestConverter(PixelTo
             case Format::XBGR1555: return &converter_XRGB8888_to_XBGR1555;
 
             default:
-                return nullptr;
+                throw InvalidParameterException(2003, "Unsupported format conversion: XRGB8888 to unknown format");
         }
     }
 
-    return nullptr;
+    throw InvalidParameterException(2004, "Unsupported format conversion: unknown source format");
 }

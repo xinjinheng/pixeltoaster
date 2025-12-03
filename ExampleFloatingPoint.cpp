@@ -13,33 +13,56 @@ using namespace PixelToaster;
 
 int main()
 {
-    const int width  = 320;
-    const int height = 240;
-
-    Display display("Floating Point Example", width, height);
-
-    vector<Pixel> pixels(width * height);
-
-    while (display.open())
+    try
     {
-        unsigned int index = 0;
+        const int width  = 320;
+        const int height = 240;
 
-        for (int y = 0; y < height; ++y)
+        Display display("Floating Point Example", width, height);
+
+        vector<Pixel> pixels(width * height);
+
+        while (display.open())
         {
-            for (int x = 0; x < width; ++x)
-            {
-                pixels[index].r = 0.1f + (x + y) * 0.0015f;
-                pixels[index].g = 0.5f + (x + y) * 0.001f;
-                pixels[index].b = 0.7f + (x + y) * 0.0005f;
+            unsigned int index = 0;
 
-                ++index;
+            for (int y = 0; y < height; ++y)
+            {
+                for (int x = 0; x < width; ++x)
+                {
+                    pixels[index].r = 0.1f + (x + y) * 0.0015f;
+                    pixels[index].g = 0.5f + (x + y) * 0.001f;
+                    pixels[index].b = 0.7f + (x + y) * 0.0005f;
+
+                    ++index;
+                }
             }
-        }
 
 #ifdef PIXELTOASTER_NO_STL
-        display.update(pixels.data());
+            display.update(pixels.data());
 #else
-        display.update(pixels);
+            display.update(pixels);
 #endif
+        }
     }
+    catch (const PixelToasterException& e)
+    {
+        // Print error message and exit with failure
+        printf("PixelToaster Error: %s (Error Code: %d)\n", e.what(), e.errorCode());
+        return 1;
+    }
+    catch (const std::exception& e)
+    {
+        // Print general error message and exit with failure
+        printf("Error: %s\n", e.what());
+        return 1;
+    }
+    catch (...)
+    {
+        // Print unknown error message and exit with failure
+        printf("Unknown Error\n");
+        return 1;
+    }
+
+    return 0;
 }

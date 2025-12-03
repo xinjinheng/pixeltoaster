@@ -13,6 +13,98 @@ using namespace PixelToaster;
 
 // ----------------------------------------------------------------------------------------
 
+void test_exception_handling()
+{
+    printf("testing exception handling:\n\n");
+
+    // 测试无效参数异常
+    printf("   testing invalid parameter exception\n");
+    try
+    {
+        // 创建一个宽度为0的显示器
+        Display display("Test", 0, 240);
+        printf("     failed: should have thrown InvalidParameterException\n");
+        exit(1);
+    }
+    catch (const InvalidParameterException& e)
+    {
+        printf("     passed: caught InvalidParameterException - %s\n", e.what());
+    }
+    catch (...)
+    {
+        printf("     failed: caught unexpected exception\n");
+        exit(1);
+    }
+
+    // 测试空指针异常
+    printf("   testing null pointer exception\n");
+    try
+    {
+        // 创建一个正常的显示器
+        Display display("Test", 320, 240);
+        // 尝试使用空指针更新像素
+        display.update(nullptr);
+        printf("     failed: should have thrown NullPointerException\n");
+        exit(1);
+    }
+    catch (const NullPointerException& e)
+    {
+        printf("     passed: caught NullPointerException - %s\n", e.what());
+    }
+    catch (...)
+    {
+        printf("     failed: caught unexpected exception\n");
+        exit(1);
+    }
+
+    // 测试无效格式转换异常
+    printf("   testing invalid format conversion exception\n");
+    try
+    {
+        // 尝试获取不支持的格式转换器
+        Converter* converter = requestConverter(Format::XRGB8888, static_cast<Format>(999));
+        if (converter)
+        {
+            printf("     failed: should have thrown InvalidParameterException\n");
+            delete converter;
+            exit(1);
+        }
+    }
+    catch (const InvalidParameterException& e)
+    {
+        printf("     passed: caught InvalidParameterException - %s\n", e.what());
+    }
+    catch (...)
+    {
+        printf("     failed: caught unexpected exception\n");
+        exit(1);
+    }
+
+    // 测试平台异常
+    printf("   testing platform exception\n");
+    try
+    {
+        // 创建一个分辨率过大的显示器
+        Display display("Test", 10000, 10000);
+        // 尝试打开显示器
+        display.open();
+        printf("     warning: could not reproduce platform exception (may be platform-dependent)\n");
+    }
+    catch (const PlatformException& e)
+    {
+        printf("     passed: caught PlatformException - %s\n", e.what());
+    }
+    catch (...)
+    {
+        printf("     failed: caught unexpected exception\n");
+        exit(1);
+    }
+
+    printf("\n");
+}
+
+// ----------------------------------------------------------------------------------------
+
 bool equal(float a, float b)
 {
     const float epsilon    = 0.000001f;
@@ -3800,12 +3892,31 @@ void test_conversion()
 
 int main()
 {
-    printf("\n[ PixelToaster Test Suite ]\n\n");
+    try
+    {
+        printf("\n[ PixelToaster Test Suite ]\n\n");
 
-    test_conversion();
-    test_converter_objects();
+        test_conversion();
+        test_converter_objects();
+        test_exception_handling();
 
-    printf("test completed successfully!\n\n");
+        printf("test completed successfully!\n\n");
 
-    return 0;
+        return 0;
+    }
+    catch (const PixelToasterException& e)
+    {
+        printf("PixelToaster Error: %s (Error Code: %d)\n", e.what(), e.errorCode());
+        return 1;
+    }
+    catch (const std::exception& e)
+    {
+        printf("Error: %s\n", e.what());
+        return 1;
+    }
+    catch (...)
+    {
+        printf("Unknown Error\n");
+        return 1;
+    }
 }

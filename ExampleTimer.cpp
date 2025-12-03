@@ -9,44 +9,67 @@ using namespace PixelToaster;
 
 int main()
 {
-    printf("\n[ Timer Example ]\n\n");
-
-    Timer timer;
-
-    printf("theoretical timer resolution is %f microseconds\n\n", 1e6 * timer.resolution());
-    timer.delta();
-    printf("practical timer resolution is %f microseconds\n\n", 1e6 * timer.delta());
-
-    printf("waiting for one second...\n");
-
-    const double waitStart = timer.time();
-    timer.wait(1.0);
-    const double waitFinish = timer.time();
-
-    printf("  %g seconds elapsed according to timer\n\n", waitFinish - waitStart);
-
-    printf("loop time + delta...\n");
-
-    timer.reset();
-
-    for (int i = 0; i < 5; ++i)
+    try
     {
-        timer.wait(0.1f);
-        const double time  = timer.time();
-        const double delta = timer.delta();
-        printf("  time = %.2g, delta = %g\n", time, delta);
+        printf("\n[ Timer Example ]\n\n");
+
+        Timer timer;
+
+        printf("theoretical timer resolution is %f microseconds\n\n", 1e6 * timer.resolution());
+        timer.delta();
+        printf("practical timer resolution is %f microseconds\n\n", 1e6 * timer.delta());
+
+        printf("waiting for one second...\n");
+
+        const double waitStart = timer.time();
+        timer.wait(1.0);
+        const double waitFinish = timer.time();
+
+        printf("  %g seconds elapsed according to timer\n\n", waitFinish - waitStart);
+
+        printf("loop time + delta...\n");
+
+        timer.reset();
+
+        for (int i = 0; i < 5; ++i)
+        {
+            timer.wait(0.1f);
+            const double time  = timer.time();
+            const double delta = timer.delta();
+            printf("  time = %.2g, delta = %g\n", time, delta);
+        }
+
+        printf("\nloop delta only...\n");
+
+        timer.reset();
+
+        for (int i = 0; i < 5; ++i)
+        {
+            timer.wait(0.1f);
+            const double delta = timer.delta();
+            printf("  delta = %g\n", delta);
+        }
+
+        printf("\ndone.\n\n");
+    }
+    catch (const PixelToasterException& e)
+    {
+        // Print error message and exit with failure
+        printf("PixelToaster Error: %s (Error Code: %d)\n", e.what(), e.errorCode());
+        return 1;
+    }
+    catch (const std::exception& e)
+    {
+        // Print general error message and exit with failure
+        printf("Error: %s\n", e.what());
+        return 1;
+    }
+    catch (...)
+    {
+        // Print unknown error message and exit with failure
+        printf("Unknown Error\n");
+        return 1;
     }
 
-    printf("\nloop delta only...\n");
-
-    timer.reset();
-
-    for (int i = 0; i < 5; ++i)
-    {
-        timer.wait(0.1f);
-        const double delta = timer.delta();
-        printf("  delta = %g\n", delta);
-    }
-
-    printf("\ndone.\n\n");
+    return 0;
 }
