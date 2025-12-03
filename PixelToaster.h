@@ -41,6 +41,10 @@
 #    pragma warning(disable : 4996) // warning C4201: stupid visual c++ deprecated stuff
 #endif
 
+// include necessary headers for exceptions
+#include <stdexcept>
+#include <string>
+
 // platforms
 
 #define PIXELTOASTER_NULL 0
@@ -115,6 +119,143 @@
 #else
 #    define PIXELTOASTER_API
 #endif
+
+// exception handling
+
+namespace PixelToaster {
+
+/** rief Base class for all PixelToaster exceptions.
+
+		All exceptions thrown by PixelToaster library inherit from this class.
+		It contains an error code and a detailed error message.
+	**/
+
+class PIXELTOASTER_API PixelToasterException : public std::exception
+{
+public:
+    /** rief Constructor with error code and message.
+
+			@param errorCode Numeric error code
+			@param message Detailed error message
+		**/
+
+    PixelToasterException(int errorCode, const std::string& message)
+        : m_errorCode(errorCode)
+        , m_message(message)
+    {}
+
+    /** rief Destructor.
+    **/
+
+    virtual ~PixelToasterException() noexcept override = default;
+
+    /** rief Get error code.
+
+			@returns Numeric error code
+		**/
+
+    int errorCode() const noexcept
+    {
+        return m_errorCode;
+    }
+
+    /** rief Get error message.
+
+			@returns Detailed error message
+		**/
+
+    const char* what() const noexcept override
+    {
+        return m_message.c_str();
+    }
+
+protected:
+    int m_errorCode;
+    std::string m_message;
+};
+
+/** rief Exception thrown when a null pointer is encountered.
+
+		This exception is thrown when a null pointer is passed to a function
+		that expects a valid pointer, or when a function returns a null pointer
+		when a valid pointer is expected.
+	**/
+
+class PIXELTOASTER_API NullPointerException : public PixelToasterException
+{
+public:
+    /** rief Constructor with error code and message.
+
+			@param errorCode Numeric error code
+			@param message Detailed error message
+		**/
+
+    NullPointerException(int errorCode, const std::string& message)
+        : PixelToasterException(errorCode, message)
+    {}
+};
+
+/** rief Exception thrown when a resource cannot be allocated or accessed.
+
+		This exception is thrown when memory allocation fails, file operations
+		fail, or system resources cannot be acquired.
+	**/
+
+class PIXELTOASTER_API ResourceException : public PixelToasterException
+{
+public:
+    /** rief Constructor with error code and message.
+
+			@param errorCode Numeric error code
+			@param message Detailed error message
+		**/
+
+    ResourceException(int errorCode, const std::string& message)
+        : PixelToasterException(errorCode, message)
+    {}
+};
+
+/** rief Exception thrown when an invalid parameter is passed to a function.
+
+		This exception is thrown when a function is called with a parameter
+		that is out of range, of the wrong type, or otherwise invalid.
+	**/
+
+class PIXELTOASTER_API InvalidParameterException : public PixelToasterException
+{
+public:
+    /** rief Constructor with error code and message.
+
+			@param errorCode Numeric error code
+			@param message Detailed error message
+		**/
+
+    InvalidParameterException(int errorCode, const std::string& message)
+        : PixelToasterException(errorCode, message)
+    {}
+};
+
+/** rief Exception thrown when a platform-specific error occurs.
+
+		This exception is thrown when a platform-specific operation fails,
+		such as DirectX on Windows, X11 on Unix/Linux, or Cocoa/OpenGL on Mac OS X.
+	**/
+
+class PIXELTOASTER_API PlatformException : public PixelToasterException
+{
+public:
+    /** rief Constructor with error code and message.
+
+			@param errorCode Numeric error code
+			@param message Detailed error message
+		**/
+
+    PlatformException(int errorCode, const std::string& message)
+        : PixelToasterException(errorCode, message)
+    {}
+};
+
+} // namespace PixelToaster
 
 // executable size optimization
 
@@ -774,13 +915,13 @@ class DisplayInterface
 public:
     virtual ~DisplayInterface() = default;
 
-    virtual bool open(const char title[], int width, int height, Output output = Output::Default, Mode mode = Mode::FloatingPoint) = 0;
+    virtual void open(const char title[], int width, int height, Output output = Output::Default, Mode mode = Mode::FloatingPoint) = 0;
     virtual void close()                                                                                                           = 0;
 
     virtual bool open() const = 0;
 
-    virtual bool update(const FloatingPointPixel pixels[], const Rectangle* dirtyBox = nullptr) = 0;
-    virtual bool update(const TrueColorPixel pixels[], const Rectangle* dirtyBox = nullptr)     = 0;
+    virtual void update(const FloatingPointPixel pixels[], const Rectangle* dirtyBox = nullptr) = 0;
+    virtual void update(const TrueColorPixel pixels[], const Rectangle* dirtyBox = nullptr)     = 0;
 
     virtual const char* title() const             = 0;
     virtual void        title(const char title[]) = 0;
@@ -850,22 +991,60 @@ class Display : public DisplayInterface
 public:
     /// Creates the display object but does not open the display.
     /// You need to call Display::open first before you can copy pixels to the display with Display::update.
+    /// @throws ResourceException if memory allocation fails
+    /// @throws PlatformException if the platform is unsupported
 
     Display()
     {
-        internal = createDisplay();
-        internal->wrapper(this);
+        try
+        {
+            internal = createDisplay();
+            if (!internal)
+            {
+                throw NullPointerException(3001, "Failed to create display: internal pointer is null");
+            }
+            internal->wrapper(this);
+        }
+        catch (...)
+        {
+            internal = nullptr;
+            throw;
+        }
     }
 
     /// Create and open display in one step.
     /// This is equivalent to creating a display using the default constructor then calling Display::open.
-    /// \see Display::open
+    /// @param title the title of the display window or fullscreen application.
+    /// @param width the width of the display in pixels.
+    /// @param height the height of the display in pixels.
+    /// @param output the output type of the display.
+    /// @param mode the mode of operation for the display.
+    /// @throws ResourceException if memory allocation fails
+    /// @throws PlatformException if the platform is unsupported
+    /// @throws InvalidParameterException if parameters are invalid
+    /// @throws PlatformException if display cannot be opened
 
     Display(const char title[], int width, int height, Output output = Output::Default, Mode mode = Mode::FloatingPoint)
     {
-        internal = createDisplay();
-        internal->wrapper(this);
-        open(title, width, height, output, mode);
+        try
+        {
+            internal = createDisplay();
+            if (!internal)
+            {
+                throw NullPointerException(3002, "Failed to create display: internal pointer is null");
+            }
+            internal->wrapper(this);
+            open(title, width, height, output, mode);
+        }
+        catch (...)
+        {
+            if (internal)
+            {
+                delete internal;
+                internal = nullptr;
+            }
+            throw;
+        }
     }
 
     /// Destructor.
@@ -887,14 +1066,37 @@ public:
     /// @param height the height of the display in pixels.
     /// @param output the output type of the display. you can choose between windowed output and fullscreen output, or you can leave it up to the display by passing in default.
     /// @param mode the mode of operation for the display. you can choose between true color mode and floating point color mode.
-    /// @returns true if the display open was successful.
+    /// @throws NullPointerException if internal display pointer is null
+    /// @throws InvalidParameterException if parameters are invalid
+    /// @throws ResourceException if system resources cannot be allocated
+    /// @throws PlatformException if display cannot be opened
 
-    bool open(const char title[], int width, int height, Output output = Output::Default, Mode mode = Mode::FloatingPoint) override
+    void open(const char title[], int width, int height, Output output = Output::Default, Mode mode = Mode::FloatingPoint) override
     {
-        if (internal)
-            return internal->open(title, width, height, output, mode);
-        else
-            return false;
+        if (!internal)
+        {
+            throw NullPointerException(3003, "Failed to open display: internal pointer is null");
+        }
+
+        if (!title || *title == '\0')
+        {
+            throw InvalidParameterException(3004, "Failed to open display: invalid title");
+        }
+
+        if (width <= 0 || height <= 0)
+        {
+            throw InvalidParameterException(3005, "Failed to open display: invalid width or height");
+        }
+
+        if (width > 8192 || height > 8192)
+        {
+            throw InvalidParameterException(3006, "Failed to open display: resolution too high");
+        }
+
+        if (!internal->open(title, width, height, output, mode))
+        {
+            throw PlatformException(3007, "Failed to open display: platform-specific error");
+        }
     }
 
     /// Close display.
@@ -932,14 +1134,44 @@ public:
     ///
     /// @param pixels the pixels to copy to the screen.
     /// @param dirtyBox range of pixels that have been changed since last call.
-    /// @returns true if the update was successful.
+    /// @throws NullPointerException if internal display pointer or pixels pointer is null
+    /// @throws InvalidParameterException if dirtyBox is invalid
+    /// @throws PlatformException if update fails
 
-    bool update(const class FloatingPointPixel pixels[], const Rectangle* dirtyBox = nullptr) override
+    void update(const class FloatingPointPixel pixels[], const Rectangle* dirtyBox = nullptr) override
     {
-        if (internal)
-            return internal->update(pixels, dirtyBox);
-        else
-            return false;
+        if (!internal)
+        {
+            throw NullPointerException(3008, "Failed to update display: internal pointer is null");
+        }
+
+        if (!pixels)
+        {
+            throw NullPointerException(3009, "Failed to update display: pixels pointer is null");
+        }
+
+        if (!open())
+        {
+            throw PlatformException(3010, "Failed to update display: display is not open");
+        }
+
+        if (dirtyBox)
+        {
+            if (dirtyBox->xBegin < 0 || dirtyBox->xEnd > width() || dirtyBox->yBegin < 0 || dirtyBox->yEnd > height())
+            {
+                throw InvalidParameterException(3011, "Failed to update display: invalid dirty box");
+            }
+
+            if (dirtyBox->xBegin >= dirtyBox->xEnd || dirtyBox->yBegin >= dirtyBox->yEnd)
+            {
+                throw InvalidParameterException(3012, "Failed to update display: empty dirty box");
+            }
+        }
+
+        if (!internal->update(pixels, dirtyBox))
+        {
+            throw PlatformException(3013, "Failed to update display: platform-specific error");
+        }
     }
 
     /// Update display with truecolor pixels.
@@ -957,14 +1189,44 @@ public:
     ///
     /// @param pixels the pixels to copy to the screen.
     /// @param dirtyBox range of pixels that have been changed since last call.
-    /// @returns true if the update was successful.
+    /// @throws NullPointerException if internal display pointer or pixels pointer is null
+    /// @throws InvalidParameterException if dirtyBox is invalid
+    /// @throws PlatformException if update fails
 
-    bool update(const TrueColorPixel pixels[], const Rectangle* dirtyBox = nullptr) override
+    void update(const TrueColorPixel pixels[], const Rectangle* dirtyBox = nullptr) override
     {
-        if (internal)
-            return internal->update(pixels, dirtyBox);
-        else
-            return false;
+        if (!internal)
+        {
+            throw NullPointerException(3014, "Failed to update display: internal pointer is null");
+        }
+
+        if (!pixels)
+        {
+            throw NullPointerException(3015, "Failed to update display: pixels pointer is null");
+        }
+
+        if (!open())
+        {
+            throw PlatformException(3016, "Failed to update display: display is not open");
+        }
+
+        if (dirtyBox)
+        {
+            if (dirtyBox->xBegin < 0 || dirtyBox->xEnd > width() || dirtyBox->yBegin < 0 || dirtyBox->yEnd > height())
+            {
+                throw InvalidParameterException(3017, "Failed to update display: invalid dirty box");
+            }
+
+            if (dirtyBox->xBegin >= dirtyBox->xEnd || dirtyBox->yBegin >= dirtyBox->yEnd)
+            {
+                throw InvalidParameterException(3018, "Failed to update display: empty dirty box");
+            }
+        }
+
+        if (!internal->update(pixels, dirtyBox))
+        {
+            throw PlatformException(3019, "Failed to update display: platform-specific error");
+        }
     }
 
 #ifndef PIXELTOASTER_NO_STL
@@ -972,21 +1234,37 @@ public:
     /// Update display with standard vector of floating point pixels.
     /// This is just a helper method to make it a bit cleaner to pass a vector of pixels into the update.
     /// @param pixels the pixels to copy to the screen.
-    /// @returns true if the update was successful.
+    /// @param dirtyBox range of pixels that have been changed since last call.
+    /// @throws NullPointerException if internal display pointer is null
+    /// @throws InvalidParameterException if pixels vector is empty or dirtyBox is invalid
+    /// @throws PlatformException if update fails
 
-    bool update(const vector<FloatingPointPixel>& pixels, const Rectangle* dirtyBox = nullptr)
+    void update(const vector<FloatingPointPixel>& pixels, const Rectangle* dirtyBox = nullptr)
     {
-        return update(pixels.data(), dirtyBox);
+        if (pixels.empty())
+        {
+            throw InvalidParameterException(3020, "Failed to update display: pixels vector is empty");
+        }
+
+        update(pixels.data(), dirtyBox);
     }
 
     /// Update display with standard vector of truecolor pixels.
     /// This is just a helper method to make it a bit cleaner to pass a vector of pixels into the update.
     /// @param pixels the pixels to copy to the screen.
-    /// @returns true if the update was successful.
+    /// @param dirtyBox range of pixels that have been changed since last call.
+    /// @throws NullPointerException if internal display pointer is null
+    /// @throws InvalidParameterException if pixels vector is empty or dirtyBox is invalid
+    /// @throws PlatformException if update fails
 
-    bool update(const vector<TrueColorPixel>& pixels, const Rectangle* dirtyBox = nullptr)
+    void update(const vector<TrueColorPixel>& pixels, const Rectangle* dirtyBox = nullptr)
     {
-        return update(pixels.data(), dirtyBox);
+        if (pixels.empty())
+        {
+            throw InvalidParameterException(3021, "Failed to update display: pixels vector is empty");
+        }
+
+        update(pixels.data(), dirtyBox);
     }
 
 #endif
@@ -1128,10 +1406,24 @@ class Timer
 {
 public:
     /// The default constructor sets the current time to zero and starts the timer.
+    /// @throws ResourceException if memory allocation fails
+    /// @throws PlatformException if the platform is unsupported
 
     Timer()
     {
-        internal = createTimer();
+        try
+        {
+            internal = createTimer();
+            if (!internal)
+            {
+                throw NullPointerException(4001, "Failed to create timer: internal pointer is null");
+            }
+        }
+        catch (...)
+        {
+            internal = nullptr;
+            throw;
+        }
     }
 
     ~Timer()
