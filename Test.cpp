@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "PixelToaster.h"
+#include "Iterator.h"
 #include "PixelToasterConversion.h"
 
 using namespace PixelToaster;
@@ -3798,14 +3799,305 @@ void test_conversion()
 
 // ----------------------------------------------------------------------------------------
 
+void test_exception_handling()
+{
+    printf("\ntesting exception handling:\n\n");
+
+    // Test 1: Invalid parameter exception in requestConverter
+    printf("   test 1: invalid parameter exception in requestConverter\n");
+    try
+    {
+        Converter* converter = requestConverter(Format::Unknown, Format::XRGB8888);
+        (void)converter; // 避免未使用变量警告
+        printf("     failed: no exception thrown\n");
+        exit(1);
+    }
+    catch (const InvalidParameterException& e)
+    {
+        printf("     passed: caught InvalidParameterException - %s\n", e.what());
+    }
+    catch (...)
+    {
+        printf("     failed: wrong exception type\n");
+        exit(1);
+    }
+
+    // Test 2: Invalid parameter exception in Display::open
+    printf("   test 2: invalid parameter exception in Display::open\n");
+    try
+    {
+        Display display("Test", 0, 100); // 无效宽度
+        printf("     failed: no exception thrown\n");
+        exit(1);
+    }
+    catch (const InvalidParameterException& e)
+    {
+        printf("     passed: caught InvalidParameterException - %s\n", e.what());
+    }
+    catch (...)
+    {
+        printf("     failed: wrong exception type\n");
+        exit(1);
+    }
+
+    // Test 3: NullPointerException in Display::update
+    printf("   test 3: null pointer exception in Display::update\n");
+    try
+    {
+        Display display("Test", 100, 100);
+        display.update((const TrueColorPixel*)nullptr); // 空指针
+        printf("     failed: no exception thrown\n");
+        exit(1);
+    }
+    catch (const NullPointerException& e)
+    {
+        printf("     passed: caught NullPointerException - %s\n", e.what());
+    }
+    catch (...)
+    {
+        printf("     failed: wrong exception type\n");
+        exit(1);
+    }
+
+    // Test 4: FileOperationException in load function
+    printf("   test 4: file operation exception\n");
+    try
+    {
+        vector<Pixel> pixels;
+        int width, height;
+        load("nonexistent_file.tga", width, height, pixels);
+        printf("     failed: no exception thrown\n");
+        exit(1);
+    }
+    catch (const FileOperationException& e)
+    {
+        printf("     passed: caught FileOperationException - %s\n", e.what());
+    }
+    catch (...)
+    {
+        printf("     failed: wrong exception type\n");
+        exit(1);
+    }
+
+    // Test 5: Test exception inheritance
+    printf("   test 5: exception inheritance\n");
+    try
+    {
+        Display display("Test", -1, 100); // 无效宽度
+        printf("     failed: no exception thrown\n");
+        exit(1);
+    }
+    catch (const PixelToasterException& e)
+    {
+        printf("     passed: caught PixelToasterException (base class) - %s\n", e.what());
+    }
+    catch (...)
+    {
+        printf("     failed: wrong exception type\n");
+        exit(1);
+    }
+
+    printf("\nall exception tests passed!\n");
+}
+
+void test_iterator_functionality()
+{
+    printf("\ntesting iterator functionality:\n\n");
+
+    // Test 1: RawIterator basic functionality
+    printf("   test 1: RawIterator basic functionality\n");
+    try
+    {
+        int data[] = {1, 2, 3, 4, 5};
+        size_t size = sizeof(data) / sizeof(data[0]);
+        auto iterator = PixelToaster::createRawIterator(data, size);
+
+        int expected = 1;
+        while (iterator->hasNext())
+        {
+            int value = iterator->next();
+            if (value != expected)
+            {
+                printf("     failed: expected %d, got %d\n", expected, value);
+                exit(1);
+            }
+            expected++;
+        }
+
+        if (iterator->getIteratedCount() != size)
+        {
+            printf("     failed: expected %zu elements iterated, got %zu\n", size, iterator->getIteratedCount());
+            exit(1);
+        }
+
+        printf("     passed\n");
+    }
+    catch (const std::exception& e)
+    {
+        printf("     failed: %s\n", e.what());
+        exit(1);
+    }
+
+    // Test 2: VectorIterator basic functionality
+    printf("   test 2: VectorIterator basic functionality\n");
+    try
+    {
+        std::vector<float> data = {1.1f, 2.2f, 3.3f, 4.4f, 5.5f};
+        auto iterator = PixelToaster::createVectorIterator(data);
+
+        float expected = 1.1f;
+        while (iterator->hasNext())
+        {
+            float value = iterator->next();
+            if (value != expected)
+            {
+                printf("     failed: expected %.1f, got %.1f\n", expected, value);
+                exit(1);
+            }
+            expected += 1.1f;
+        }
+
+        if (iterator->getIteratedCount() != data.size())
+        {
+            printf("     failed: expected %zu elements iterated, got %zu\n", data.size(), iterator->getIteratedCount());
+            exit(1);
+        }
+
+        printf("     passed\n");
+    }
+    catch (const std::exception& e)
+    {
+        printf("     failed: %s\n", e.what());
+        exit(1);
+    }
+
+    // Test 3: Iterator reset functionality
+    printf("   test 3: Iterator reset functionality\n");
+    try
+    {
+        int data[] = {1, 2, 3};
+        size_t size = sizeof(data) / sizeof(data[0]);
+        auto iterator = PixelToaster::createRawIterator(data, size);
+
+        // Iterate once
+        while (iterator->hasNext())
+            iterator->next();
+
+        // Reset and iterate again
+        iterator->reset();
+
+        int expected = 1;
+        while (iterator->hasNext())
+        {
+            int value = iterator->next();
+            if (value != expected)
+            {
+                printf("     failed: expected %d, got %d\n", expected, value);
+                exit(1);
+            }
+            expected++;
+        }
+
+        printf("     passed\n");
+    }
+    catch (const std::exception& e)
+    {
+        printf("     failed: %s\n", e.what());
+        exit(1);
+    }
+
+    // Test 4: Iterator timeout functionality
+    printf("   test 4: Iterator timeout functionality\n");
+    try
+    {
+        int data[] = {1};
+        size_t size = sizeof(data) / sizeof(data[0]);
+        auto iterator = PixelToaster::createRawIterator(data, size);
+
+        // Get the only element
+        iterator->next();
+
+        // Try to get next element with timeout
+        try
+        {
+            iterator->next(100); // 100ms timeout
+            printf("     failed: no timeout exception thrown\n");
+            exit(1);
+        }
+        catch (const PixelToaster::IteratorTimeoutException& e)
+        {
+            printf("     passed: caught IteratorTimeoutException - %s\n", e.what());
+        }
+    }
+    catch (const std::exception& e)
+    {
+        printf("     failed: %s\n", e.what());
+        exit(1);
+    }
+
+    // Test 5: Iterator state tracking
+    printf("   test 5: Iterator state tracking\n");
+    try
+    {
+        int data[] = {1, 2, 3, 4, 5};
+        size_t size = sizeof(data) / sizeof(data[0]);
+        auto iterator = PixelToaster::createRawIterator(data, size);
+
+        // Iterate 3 elements
+        for (int i = 0; i < 3; i++)
+            iterator->next();
+
+        if (iterator->getCurrentPosition() != 3)
+        {
+            printf("     failed: expected position %d, got %zu\n", 3, iterator->getCurrentPosition());
+            exit(1);
+        }
+
+        if (iterator->getIteratedCount() != 3)
+        {
+            printf("     failed: expected %d elements iterated, got %zu\n", 3, iterator->getIteratedCount());
+            exit(1);
+        }
+
+        printf("     passed\n");
+    }
+    catch (const std::exception& e)
+    {
+        printf("     failed: %s\n", e.what());
+        exit(1);
+    }
+
+    printf("\nall iterator tests passed!\n");
+}
+
 int main()
 {
-    printf("\n[ PixelToaster Test Suite ]\n\n");
+    try
+    {
+        printf("\n[ PixelToaster Test Suite ]\n\n");
 
-    test_conversion();
-    test_converter_objects();
+        test_conversion();
+        test_converter_objects();
+        test_exception_handling();
+        test_iterator_functionality();
 
-    printf("test completed successfully!\n\n");
+        printf("\nall tests completed successfully!\n\n");
 
-    return 0;
+        return 0;
+    }
+    catch (const PixelToasterException& e)
+    {
+        printf("\nPixelToaster error during testing: %s (Error code: %d)\n", e.what(), e.getErrorCode());
+        return 1;
+    }
+    catch (const std::exception& e)
+    {
+        printf("\nStandard library error during testing: %s\n", e.what());
+        return 1;
+    }
+    catch (...)
+    {
+        printf("\nUnknown error during testing\n");
+        return 1;
+    }
 }

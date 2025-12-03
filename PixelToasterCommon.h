@@ -31,18 +31,53 @@ public:
     {
         _listener = nullptr;
         _wrapper  = nullptr;
-        defaults();
+        try
+        {
+            defaults();
+        }
+        catch (const std::exception& e)
+        {
+            throw PixelToaster::ResourceException(std::string("Failed to initialize display adapter: ") + e.what());
+        }
     }
 
     ~DisplayAdapter()
     {
-        close();
-        _listener = nullptr;
-        _wrapper  = nullptr;
+        try
+        {
+            close();
+            _listener = nullptr;
+            _wrapper  = nullptr;
+        }
+        catch (const std::exception& e)
+        {
+            // 析构函数不应该抛出异常，所以我们只记录错误
+            (void)e; // 避免未使用变量警告
+        }
     }
 
     bool open(const char title[], int width, int height, Output output, Mode mode) override
     {
+        // 参数范围检查
+        if (width <= 0 || width > 8192)
+        {
+            throw PixelToaster::InvalidParameterException(
+                std::string("Invalid width parameter: ") + std::to_string(width) + 
+                ". Width must be between 1 and 8192.");
+        }
+        
+        if (height <= 0 || height > 8192)
+        {
+            throw PixelToaster::InvalidParameterException(
+                std::string("Invalid height parameter: ") + std::to_string(height) + 
+                ". Height must be between 1 and 8192.");
+        }
+        
+        if (title == nullptr)
+        {
+            throw PixelToaster::NullPointerException("Title parameter cannot be null");
+        }
+        
         close();
 
         magical_strcpy(_title, title);
@@ -67,18 +102,48 @@ public:
 
     bool update(const TrueColorPixel pixels[], const Rectangle* dirtyBox) override
     {
-        if (pixels)
-            return update(pixels, 0, dirtyBox);
-        else
-            return false;
+        if (pixels == nullptr)
+        {
+            throw PixelToaster::NullPointerException("TrueColorPixel pixels array cannot be null");
+        }
+        
+        if (dirtyBox != nullptr)
+        {
+            if (dirtyBox->x < 0 || dirtyBox->y < 0 || 
+                dirtyBox->width <= 0 || dirtyBox->height <= 0)
+            {
+                throw PixelToaster::InvalidParameterException(
+                    std::string("Invalid dirtyBox parameters: x=") + std::to_string(dirtyBox->x) +
+                    ", y=" + std::to_string(dirtyBox->y) +
+                    ", width=" + std::to_string(dirtyBox->width) +
+                    ", height=" + std::to_string(dirtyBox->height));
+            }
+        }
+        
+        return update(pixels, 0, dirtyBox);
     }
 
     bool update(const FloatingPointPixel pixels[], const Rectangle* dirtyBox) override
     {
-        if (pixels)
-            return update(0, pixels, dirtyBox);
-        else
-            return false;
+        if (pixels == nullptr)
+        {
+            throw PixelToaster::NullPointerException("FloatingPointPixel pixels array cannot be null");
+        }
+        
+        if (dirtyBox != nullptr)
+        {
+            if (dirtyBox->x < 0 || dirtyBox->y < 0 || 
+                dirtyBox->width <= 0 || dirtyBox->height <= 0)
+            {
+                throw PixelToaster::InvalidParameterException(
+                    std::string("Invalid dirtyBox parameters: x=") + std::to_string(dirtyBox->x) +
+                    ", y=" + std::to_string(dirtyBox->y) +
+                    ", width=" + std::to_string(dirtyBox->width) +
+                    ", height=" + std::to_string(dirtyBox->height));
+            }
+        }
+        
+        return update(0, pixels, dirtyBox);
     }
 
     const char* title() const override
@@ -192,8 +257,15 @@ class PortableTimer : public PixelToaster::TimerInterface
 public:
     PortableTimer()
     {
-        _resolution = 1.0 / CLOCKS_PER_SEC;
-        reset();
+        try
+        {
+            _resolution = 1.0 / CLOCKS_PER_SEC;
+            reset();
+        }
+        catch (const std::exception& e)
+        {
+            throw PixelToaster::ResourceException(std::string("Failed to initialize portable timer: ") + e.what());
+        }
     }
 
     void reset()

@@ -125,7 +125,10 @@
 
 #ifndef PIXELTOASTER_NO_STL
 #    include <vector>
+#    include <string>
 #endif
+
+#include <exception>
 
 namespace PixelToaster {
 #ifndef PIXELTOASTER_NO_STL
@@ -135,6 +138,97 @@ using std::vector;
 using integer32 = unsigned int;   ///< unsigned 32 bit integer
 using integer16 = unsigned short; ///< unsigned 16 bit integer
 using integer8  = unsigned char;  ///< unsigned 8 bit integer
+
+/** rief 异常基类
+    
+    所有PixelToaster库异常的基类，包含错误码和详细错误信息
+**/
+class PixelToasterException : public std::exception
+{
+public:
+    PixelToasterException(int errorCode, const std::string& message)
+        : errorCode_(errorCode), message_(message) {}
+    
+    virtual ~PixelToasterException() throw() {}
+    
+    int errorCode() const { return errorCode_; }
+    const std::string& message() const { return message_; }
+    
+    const char* what() const throw() override
+    {
+        return message_.c_str();
+    }
+    
+protected:
+    int errorCode_;
+    std::string message_;
+};
+
+/** rief 空指针异常
+    
+    当访问空指针或接收到空指针参数时抛出
+**/
+class NullPointerException : public PixelToasterException
+{
+public:
+    NullPointerException(const std::string& message = "Null pointer access")
+        : PixelToasterException(1001, message) {}
+};
+
+/** rief 资源异常
+    
+    当资源分配、获取或释放失败时抛出
+**/
+class ResourceException : public PixelToasterException
+{
+public:
+    ResourceException(const std::string& message = "Resource error")
+        : PixelToasterException(2001, message) {}
+};
+
+/** rief 无效参数异常
+    
+    当接收到无效参数时抛出
+**/
+class InvalidParameterException : public PixelToasterException
+{
+public:
+    InvalidParameterException(const std::string& message = "Invalid parameter")
+        : PixelToasterException(3001, message) {}
+};
+
+/** rief 平台异常
+    
+    当平台相关操作失败时抛出
+**/
+class PlatformException : public PixelToasterException
+{
+public:
+    PlatformException(const std::string& message = "Platform error")
+        : PixelToasterException(4001, message) {}
+};
+
+/** rief 内存分配异常
+    
+    当内存分配失败时抛出
+**/
+class MemoryAllocationException : public PixelToasterException
+{
+public:
+    MemoryAllocationException(const std::string& message = "Memory allocation failed")
+        : PixelToasterException(5001, message) {}
+};
+
+/** rief 文件操作异常
+    
+    当文件操作失败时抛出
+**/
+class FileOperationException : public PixelToasterException
+{
+public:
+    FileOperationException(const std::string& message = "File operation failed")
+        : PixelToasterException(6001, message) {}
+};
 
 /** \brief Represents a pixel in floating point color mode.
 

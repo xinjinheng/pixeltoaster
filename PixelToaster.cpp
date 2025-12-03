@@ -42,18 +42,58 @@
 PIXELTOASTER_API PixelToaster::DisplayInterface* PixelToaster::createDisplay()
 {
 #ifdef DisplayClass
-    return new DisplayClass();
+    try
+    {
+        DisplayInterface* display = new DisplayClass();
+        if (!display)
+        {
+            throw PixelToaster::MemoryAllocationException("Failed to allocate memory for display");
+        }
+        return display;
+    }
+    catch (const std::bad_alloc&)
+    {
+        throw PixelToaster::MemoryAllocationException("Failed to allocate memory for display");
+    }
+    catch (const PixelToaster::PixelToasterException&)
+    {
+        throw;
+    }
+    catch (const std::exception& e)
+    {
+        throw PixelToaster::ResourceException(std::string("Failed to create display: ") + e.what());
+    }
 #else
-    return nullptr;
+    throw PixelToaster::PlatformException("Display class not defined for current platform");
 #endif
 }
 
 PIXELTOASTER_API PixelToaster::TimerInterface* PixelToaster::createTimer()
 {
 #ifdef TimerClass
-    return new TimerClass();
+    try
+    {
+        TimerInterface* timer = new TimerClass();
+        if (!timer)
+        {
+            throw PixelToaster::MemoryAllocationException("Failed to allocate memory for timer");
+        }
+        return timer;
+    }
+    catch (const std::bad_alloc&)
+    {
+        throw PixelToaster::MemoryAllocationException("Failed to allocate memory for timer");
+    }
+    catch (const PixelToaster::PixelToasterException&)
+    {
+        throw;
+    }
+    catch (const std::exception& e)
+    {
+        throw PixelToaster::ResourceException(std::string("Failed to create timer: ") + e.what());
+    }
 #else
-    return nullptr;
+    throw PixelToaster::PlatformException("Timer class not defined for current platform");
 #endif
 }
 
@@ -79,6 +119,12 @@ PixelToaster::Converter_XRGB8888_to_XBGR1555 converter_XRGB8888_to_XBGR1555;
 
 PIXELTOASTER_API PixelToaster::Converter* PixelToaster::requestConverter(PixelToaster::Format source, PixelToaster::Format destination)
 {
+    // 校验源格式和目标格式是否有效
+    if (source == Format::Unknown || destination == Format::Unknown)
+    {
+        throw PixelToaster::InvalidParameterException("Invalid pixel format: source or destination format is unknown");
+    }
+
     if (source == Format::XBGRFFFF)
     {
         switch (destination)
@@ -94,7 +140,7 @@ PIXELTOASTER_API PixelToaster::Converter* PixelToaster::requestConverter(PixelTo
             case Format::XBGR1555: return &converter_XBGRFFFF_to_XBGR1555;
 
             default:
-                return nullptr;
+                throw PixelToaster::InvalidParameterException("Unsupported pixel format conversion: XBGRFFFF to " + std::to_string(static_cast<int>(destination)));
         }
     }
     else if (source == Format::XRGB8888)
@@ -112,9 +158,9 @@ PIXELTOASTER_API PixelToaster::Converter* PixelToaster::requestConverter(PixelTo
             case Format::XBGR1555: return &converter_XRGB8888_to_XBGR1555;
 
             default:
-                return nullptr;
+                throw PixelToaster::InvalidParameterException("Unsupported pixel format conversion: XRGB8888 to " + std::to_string(static_cast<int>(destination)));
         }
     }
 
-    return nullptr;
+    throw PixelToaster::InvalidParameterException("Unsupported pixel format conversion: " + std::to_string(static_cast<int>(source)) + " to " + std::to_string(static_cast<int>(destination)));
 }
