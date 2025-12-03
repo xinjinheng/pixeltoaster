@@ -1660,7 +1660,18 @@ AppleDisplay::AppleDisplay()
 
     defaults();
 
-    _private = new AppleDisplayPrivate(this);
+    try
+    {
+        _private = new AppleDisplayPrivate(this);
+    }
+    catch (const std::bad_alloc&)
+    {
+        throw PixelToaster::MemoryAllocationException("Failed to allocate memory for AppleDisplayPrivate");
+    }
+    catch (const std::exception& e)
+    {
+        throw PixelToaster::ResourceException(std::string("Failed to create AppleDisplayPrivate: ") + e.what());
+    }
 
     if (NSApp == nil)
     {

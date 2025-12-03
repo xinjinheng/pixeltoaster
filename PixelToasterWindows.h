@@ -1374,7 +1374,18 @@ public:
     {
         DisplayAdapter::open(title, width, height, output, mode);
 
-        window = new WindowsWindow(this, this, title, width, height);
+        try
+        {
+            window = new WindowsWindow(this, this, title, width, height);
+        }
+        catch (const std::bad_alloc&)
+        {
+            throw PixelToaster::MemoryAllocationException("Failed to allocate memory for WindowsWindow");
+        }
+        catch (const std::exception& e)
+        {
+            throw PixelToaster::ResourceException(std::string("Failed to create WindowsWindow: ") + e.what());
+        }
 
         window->listener(DisplayAdapter::listener()); // note: fixes bug where listener was forgotten after display close
 
@@ -1499,7 +1510,18 @@ public:
 
         window->fullscreen(width(), height());
 
-        device = new WindowsDevice(direct3d, window->handle(), width(), height(), mode(), false);
+        try
+            {
+                device = new WindowsDevice(direct3d, window->handle(), width(), height(), mode(), false);
+            }
+            catch (const std::bad_alloc&)
+            {
+                throw PixelToaster::MemoryAllocationException("Failed to allocate memory for WindowsDevice");
+            }
+            catch (const std::exception& e)
+            {
+                throw PixelToaster::ResourceException(std::string("Failed to create WindowsDevice: ") + e.what());
+            }
 
         if (!device->valid())
         {
@@ -1527,7 +1549,18 @@ public:
 
         window->windowed(width(), height());
 
-        device = new WindowsDevice(direct3d, window->handle(), width(), height(), mode(), true);
+        try
+            {
+                device = new WindowsDevice(direct3d, window->handle(), width(), height(), mode(), true);
+            }
+            catch (const std::bad_alloc&)
+            {
+                throw PixelToaster::MemoryAllocationException("Failed to allocate memory for WindowsDevice (fallback)");
+            }
+            catch (const std::exception& e)
+            {
+                throw PixelToaster::ResourceException(std::string("Failed to create WindowsDevice (fallback): ") + e.what());
+            }
 
         if (!device->valid())
         {

@@ -105,7 +105,15 @@ int main()
     for (unsigned int i = 0; i < integerSource.size(); ++i)
         integerSource[i] = 0x00FF6677;
 
-    integer8* destination = new integer8[width * height * 16];
+    integer8* destination;
+        try
+        {
+            destination = new integer8[width * height * 16];
+        }
+        catch (const std::bad_alloc&)
+        {
+            throw PixelToaster::MemoryAllocationException("Failed to allocate memory for profile destination buffer");
+        }
 
     printf("\n[ PixelToaster Profiling Suite ]\n\n");
 
