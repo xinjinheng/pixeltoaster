@@ -12,39 +12,45 @@ using std::vector;
 
 using namespace PixelToaster;
 
-bool load(const char filename[], int& width, int& height, vector<Pixel>& pixels);
+void load(const char filename[], int& width, int& height, vector<Pixel>& pixels);
 
 int main()
 {
-    // load image and show it on the screen
+    try {
+        // load image and show it on the screen
 
-    vector<Pixel> pixels;
+        vector<Pixel> pixels;
 
-    int width  = 0;
-    int height = 0;
+        int width  = 0;
+        int height = 0;
 
-    if (!load("ExampleImage.tga", width, height, pixels) &&
-        !load("../ExampleImage.tga", width, height, pixels))
-    {
-        printf("failed to load image\n");
-        return 1;
-    }
+        try {
+            load("ExampleImage.tga", width, height, pixels);
+        } catch (const PixelToasterException&) {
+            // Try loading from parent directory
+            load("../ExampleImage.tga", width, height, pixels);
+        }
 
-    Display display("Image Example", width, height);
+        Display display("Image Example", width, height);
 
-    while (display.open())
-    {
+        while (display.open())
+        {
 #ifdef PIXELTOASTER_NO_STL
-        display.update(pixels.data());
+            display.update(pixels.data());
 #else
-        display.update(pixels);
+            display.update(pixels);
 #endif
+        }
+
+    } catch (const PixelToasterException& e) {
+        printf("Error: %s (code: %d)\n", e.what(), e.getErrorCode());
+        return 1;
     }
 
     return 0;
 }
 
-bool load(const char filename[], int& width, int& height, vector<Pixel>& pixels)
+void load(const char filename[], int& width, int& height, vector<Pixel>& pixels)
 {
     unsigned int index = 0;
 
@@ -56,8 +62,7 @@ bool load(const char filename[], int& width, int& height, vector<Pixel>& pixels)
 
     if (!file)
     {
-        printf("failed to open file\n");
-        return false;
+        throw PixelToaster::ResourceException("Failed to open file: " + std::string(filename));
     }
 
     // read 18 byte TGA header
@@ -66,24 +71,24 @@ bool load(const char filename[], int& width, int& height, vector<Pixel>& pixels)
 
     if (!fread(header, 18, 1, file))
     {
-        printf("failed to read header\n");
-        goto failure;
+        fclose(file);
+        throw PixelToaster::ResourceException("Failed to read TGA header from file: " + std::string(filename));
     }
 
     // fail if not uncompressed rgb format
 
     if (header[2] != 2)
     {
-        printf("tga must be uncompressed rgb format\n");
-        goto failure;
+        fclose(file);
+        throw PixelToaster::InvalidParameterException("TGA file must be in uncompressed RGB format: " + std::string(filename));
     }
 
     // fail if not 24 bits per pixel
 
     if (header[16] != 24)
     {
-        printf("tga must be 24 bits per pixel\n");
-        goto failure;
+        fclose(file);
+        throw PixelToaster::InvalidParameterException("TGA file must be 24 bits per pixel: " + std::string(filename));
     }
 
     // read image pixels
@@ -91,12 +96,18 @@ bool load(const char filename[], int& width, int& height, vector<Pixel>& pixels)
     width  = (header[13] << 8) | header[12];
     height = (header[15] << 8) | header[14];
 
+    if (width <= 0 || height <= 0)
+    {
+        fclose(file);
+        throw PixelToaster::InvalidParameterException("Invalid image dimensions in TGA file: " + std::string(filename));
+    }
+
     buffer.resize(width * height * 3, 0);
 
     if (!fread(&buffer[0], buffer.size(), 1, file))
     {
-        printf("failed to read image pixel data\n");
-        goto failure;
+        fclose(file);
+        throw PixelToaster::ResourceException("Failed to read image pixel data from file: " + std::string(filename));
     }
 
     fclose(file);
@@ -118,16 +129,4 @@ bool load(const char filename[], int& width, int& height, vector<Pixel>& pixels)
             ++index;
         }
     }
-
-    return true;
-
-failure:
-
-    // onoes somebody call the whaaaambulance...
-
-    width  = 0;
-    height = 0;
-    fclose(file);
-
-    return false;
 }
