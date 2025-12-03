@@ -580,6 +580,17 @@ class ConverterAdapter : public Converter
     {                                                                                           \
         void convert(const void* source, void* destination, int pixels)                         \
         {                                                                                       \
+            // 参数合法性校验                                                                      \
+            if (source == nullptr) {                                                              \
+                throw PixelToaster::NullPointerException("Source pixel data pointer cannot be null", 0x4001); \
+            }                                                                                      \
+            if (destination == nullptr) {                                                         \
+                throw PixelToaster::NullPointerException("Destination pixel data pointer cannot be null", 0x4002); \
+            }                                                                                      \
+            if (pixels <= 0) {                                                                   \
+                throw PixelToaster::InvalidParameterException("Number of pixels to convert must be positive integer", 0x4003); \
+            }                                                                                      \
+                                                                                                \
             convert_##type((const source_type*)source, (destination_type*)destination, pixels); \
         }                                                                                       \
     };

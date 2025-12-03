@@ -42,18 +42,26 @@
 PIXELTOASTER_API PixelToaster::DisplayInterface* PixelToaster::createDisplay()
 {
 #ifdef DisplayClass
-    return new DisplayClass();
+    DisplayInterface* display = new DisplayClass();
+    if (!display) {
+        throw PixelToaster::ResourceException("Failed to create display object");
+    }
+    return display;
 #else
-    return nullptr;
+    throw PixelToaster::PlatformException("Display creation not supported on this platform");
 #endif
 }
 
 PIXELTOASTER_API PixelToaster::TimerInterface* PixelToaster::createTimer()
 {
 #ifdef TimerClass
-    return new TimerClass();
+    TimerInterface* timer = new TimerClass();
+    if (!timer) {
+        throw PixelToaster::ResourceException("Failed to create timer object");
+    }
+    return timer;
 #else
-    return nullptr;
+    throw PixelToaster::PlatformException("Timer creation not supported on this platform");
 #endif
 }
 
@@ -94,7 +102,7 @@ PIXELTOASTER_API PixelToaster::Converter* PixelToaster::requestConverter(PixelTo
             case Format::XBGR1555: return &converter_XBGRFFFF_to_XBGR1555;
 
             default:
-                return nullptr;
+                throw PixelToaster::InvalidParameterException("Unsupported destination format for XBGRFFFF source");
         }
     }
     else if (source == Format::XRGB8888)
@@ -112,9 +120,9 @@ PIXELTOASTER_API PixelToaster::Converter* PixelToaster::requestConverter(PixelTo
             case Format::XBGR1555: return &converter_XRGB8888_to_XBGR1555;
 
             default:
-                return nullptr;
+                throw PixelToaster::InvalidParameterException("Unsupported destination format for XRGB8888 source");
         }
     }
 
-    return nullptr;
+    throw PixelToaster::InvalidParameterException("Unsupported source format for conversion");
 }

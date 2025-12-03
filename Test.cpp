@@ -6,10 +6,94 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <stdexcept>
 #include "PixelToaster.h"
+#include "PixelToasterException.h"
 #include "PixelToasterConversion.h"
 
 using namespace PixelToaster;
+
+// ----------------------------------------------------------------------------------------
+
+void test_exception_types()
+{
+    printf("testing exception types:
+\n");
+
+    try {
+        throw PixelToasterException("Test PixelToasterException");
+    } catch (const PixelToasterException& e) {
+        printf("   PixelToasterException: %s (code: %d)\n", e.what(), e.getErrorCode());
+    }
+
+    try {
+        throw NullPointerException("Test NullPointerException");
+    } catch (const NullPointerException& e) {
+        printf("   NullPointerException: %s (code: %d)\n", e.what(), e.getErrorCode());
+    } catch (const PixelToasterException& e) {
+        printf("   Caught as PixelToasterException: %s (code: %d)\n", e.what(), e.getErrorCode());
+    }
+
+    try {
+        throw ResourceException("Test ResourceException", 123);
+    } catch (const ResourceException& e) {
+        printf("   ResourceException: %s (code: %d)\n", e.what(), e.getErrorCode());
+    }
+
+    try {
+        throw InvalidParameterException("Test InvalidParameterException", 456);
+    } catch (const InvalidParameterException& e) {
+        printf("   InvalidParameterException: %s (code: %d)\n", e.what(), e.getErrorCode());
+    }
+
+    try {
+        throw PlatformException("Test PlatformException", 789);
+    } catch (const PlatformException& e) {
+        printf("   PlatformException: %s (code: %d)\n", e.what(), e.getErrorCode());
+    }
+
+    printf("\n");
+}
+
+void test_request_converter_exceptions()
+{
+    printf("testing requestConverter exceptions:
+\n");
+
+    // Test valid conversion (should not throw)
+    try {
+        Converter* converter = requestConverter(Format::XBGRFFFF, Format::XRGB8888);
+        if (converter) {
+            printf("   Valid conversion: XBGRFFFF -> XRGB8888 succeeded\n");
+        } else {
+            printf("   Valid conversion: XBGRFFFF -> XRGB8888 failed\n");
+        }
+    } catch (const PixelToasterException& e) {
+        printf("   Valid conversion threw exception: %s\n", e.what());
+    }
+
+    // Test invalid destination format
+    try {
+        Converter* converter = requestConverter(Format::XBGRFFFF, static_cast<Format>(999));
+        printf("   Invalid destination format: should have thrown exception but returned %p\n", converter);
+    } catch (const InvalidParameterException& e) {
+        printf("   Invalid destination format: caught expected exception: %s\n", e.what());
+    } catch (const PixelToasterException& e) {
+        printf("   Invalid destination format: caught unexpected exception type: %s\n", e.what());
+    }
+
+    // Test invalid source format
+    try {
+        Converter* converter = requestConverter(static_cast<Format>(999), Format::XRGB8888);
+        printf("   Invalid source format: should have thrown exception but returned %p\n", converter);
+    } catch (const InvalidParameterException& e) {
+        printf("   Invalid source format: caught expected exception: %s\n", e.what());
+    } catch (const PixelToasterException& e) {
+        printf("   Invalid source format: caught unexpected exception type: %s\n", e.what());
+    }
+
+    printf("\n");
+}
 
 // ----------------------------------------------------------------------------------------
 
@@ -3802,6 +3886,11 @@ int main()
 {
     printf("\n[ PixelToaster Test Suite ]\n\n");
 
+    // Test exception handling
+    test_exception_types();
+    test_request_converter_exceptions();
+
+    // Test existing functionality
     test_conversion();
     test_converter_objects();
 

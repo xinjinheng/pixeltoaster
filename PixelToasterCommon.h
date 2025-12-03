@@ -45,6 +45,17 @@ public:
     {
         close();
 
+        // 参数合法性校验
+        if (title == nullptr) {
+            throw InvalidParameterException("Display title cannot be null", 0x1001);
+        }
+        if (width <= 0 || height <= 0) {
+            throw InvalidParameterException("Display width and height must be positive integers", 0x1002);
+        }
+        if (width > 8192 || height > 8192) {
+            throw InvalidParameterException("Display width and height cannot exceed 8192 pixels", 0x1003);
+        }
+
         magical_strcpy(_title, title);
         _width  = width;
         _height = height;
@@ -70,7 +81,7 @@ public:
         if (pixels)
             return update(pixels, 0, dirtyBox);
         else
-            return false;
+            throw NullPointerException("TrueColorPixel array pointer cannot be null", 0x2001);
     }
 
     bool update(const FloatingPointPixel pixels[], const Rectangle* dirtyBox) override
@@ -78,7 +89,7 @@ public:
         if (pixels)
             return update(0, pixels, dirtyBox);
         else
-            return false;
+            throw NullPointerException("FloatingPointPixel array pointer cannot be null", 0x2002);
     }
 
     const char* title() const override
@@ -227,6 +238,14 @@ public:
 
     void wait(double seconds)
     {
+        // 参数合法性校验
+        if (seconds < 0.0) {
+            throw InvalidParameterException("Wait time cannot be negative", 0x3001);
+        }
+        if (seconds > 3600.0) {
+            throw InvalidParameterException("Wait time cannot exceed 3600 seconds (1 hour)", 0x3002);
+        }
+
         clock_t start  = std::clock();
         clock_t finish = start + clock_t(seconds / _resolution);
         while (std::clock() < finish)
